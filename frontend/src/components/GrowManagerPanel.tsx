@@ -298,6 +298,10 @@ export function GrowManagerPanel({
       {compare.length > 1 && (
         <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
           <p className="meta-mono text-[11px] text-white/50">Vergleich</p>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/50">
+            <span>Trend: ^ steigt · v faellt · -> stabil</span>
+            <span>Farben: VPD lila · VWC cyan · EC orange</span>
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {grows
               .filter((grow) => compare.includes(grow.id))
@@ -356,6 +360,36 @@ export function GrowManagerPanel({
                 </div>
               ))}
           </div>
+        </div>
+      )}
+
+      {compare.length > 1 && (
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {grows
+            .filter((grow) => compare.includes(grow.id))
+            .map((grow) => {
+              const stats = buildStats(grow.id);
+              return (
+                <div key={grow.id} className="glass-card rounded-2xl px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">Summary</p>
+                  <div className="mt-2 text-sm text-white">{grow.name}</div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3 text-xs text-white/60">
+                    <div>
+                      <div>VPD Avg</div>
+                      <div className="text-white">{stats.averages.vpd != null ? stats.averages.vpd.toFixed(2) : "—"}</div>
+                    </div>
+                    <div>
+                      <div>VWC Avg</div>
+                      <div className="text-white">{stats.averages.vwc != null ? stats.averages.vwc.toFixed(1) : "—"}</div>
+                    </div>
+                    <div>
+                      <div>EC Avg</div>
+                      <div className="text-white">{stats.averages.ec != null ? stats.averages.ec.toFixed(2) : "—"}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
         </div>
       )}
 

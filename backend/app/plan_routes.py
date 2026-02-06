@@ -260,6 +260,31 @@ DEFAULT_PLAN: Dict[CultivarLiteral, Dict[SubstrateLiteral, Dict[str, Any]]] = {
 }
 
 
+def _water_profile_presets(substrate: SubstrateLiteral) -> List[Dict[str, Any]]:
+    base_profile = deepcopy(DEFAULT_WATER_PROFILE)
+    base_osmosis = DEFAULT_OSMOSIS_SHARES.get(substrate, 0.0)
+    return [
+        {
+            "id": "default",
+            "label": f"{substrate.title()} Default",
+            "waterProfile": base_profile,
+            "osmosisShare": base_osmosis,
+        },
+        {
+            "id": "ro50",
+            "label": "RO Mix 50%",
+            "waterProfile": base_profile,
+            "osmosisShare": 0.5,
+        },
+        {
+            "id": "ro80",
+            "label": "RO Mix 80%",
+            "waterProfile": base_profile,
+            "osmosisShare": 0.8,
+        },
+    ]
+
+
 def _combo_key(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> str:
     return f"{cultivar}_{substrate}"
 
@@ -506,6 +531,11 @@ def set_active_plan(payload: ActivePlanPayload):
     
     _set_active_plan_id(payload.cultivar, payload.substrate, payload.planId)
     return {"planId": payload.planId}
+
+
+@router.get("/water-profiles")
+def read_water_profiles(substrate: SubstrateLiteral = Query(...)):
+    return {"presets": _water_profile_presets(substrate)}
 
 
 @router.put("/custom")

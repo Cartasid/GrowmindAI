@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { JournalEntry } from "../types";
+import { fetchConfig, type ConfigMap } from "../services/configService";
 
 const METRICS = [
   { key: "vpd", label: "VPD", unit: "kPa", color: "#6C5BFF" },
@@ -56,6 +57,7 @@ function MetricChart({
   points,
   highlightEntryId,
   onSelectEntry,
+  targetRange,
 }: {
   label: string;
   unit: string;
@@ -63,6 +65,7 @@ function MetricChart({
   points: MetricPoint[];
   highlightEntryId?: string | null;
   onSelectEntry?: (entryId: string) => void;
+  targetRange?: { min?: number; max?: number } | null;
 }) {
   const width = 240;
   const height = 80;
@@ -112,6 +115,17 @@ function MetricChart({
   const bandTop = height - ((bandMax - minValue) / bandRange) * height;
   const bandBottom = height - ((bandMin - minValue) / bandRange) * height;
 
+  const targetMin = targetRange?.min;
+  const targetMax = targetRange?.max;
+  const targetBandTop =
+    typeof targetMax === "number"
+      ? height - ((targetMax - minValue) / bandRange) * height
+      : null;
+  const targetBandBottom =
+    typeof targetMin === "number"
+      ? height - ((targetMin - minValue) / bandRange) * height
+      : null;
+
   return (
     <div className="glass-card rounded-2xl px-4 py-3">
       <div className="flex items-center justify-between">
@@ -146,6 +160,15 @@ function MetricChart({
               fill={`${color}20`}
             />
           )}
+          {typeof targetBandTop === "number" && typeof targetBandBottom === "number" && (
+            <rect
+              x={0}
+              y={Math.min(targetBandTop, targetBandBottom)}
+              width={width}
+              height={Math.max(2, Math.abs(targetBandBottom - targetBandTop))}
+              fill={`${color}35`}
+            />
+          )}
           <path d={path} fill="none" stroke={color} strokeWidth="2" />
           {tooltipPoint && (
             <circle cx={tooltip?.x ?? 0} cy={tooltip?.y ?? 0} r={3} fill={color} />
@@ -168,6 +191,11 @@ function MetricChart({
             <div className="font-semibold text-white">
               {tooltipPoint.value.toFixed(2)} {unit}
             </div>
+            {typeof targetMin === "number" && typeof targetMax === "number" && (
+              <div className="text-[10px] text-white/50">
+                Ziel {targetMin.toFixed(2)}-{targetMax.toFixed(2)} {unit}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -184,6 +212,60 @@ export function JournalMetricsChart({
   highlightEntryId?: string | null;
   onSelectEntry?: (entryId: string) => void;
 }) {
+  const emptyTargets: Record<MetricKey, { min?: number; max?: number }> = {
+    vpd: {},
+    vwc: {},
+    ec: {},
+    ph: {},
+  };
+  const [targets, setTargets] = useState<Record<MetricKey, { min?: number; max?: number }>>(emptyTargets);
+
+  const resolveRoleValue = (config: ConfigMap | null, role: string): number | null => {
+    if (!config) return null;
+    for (const category of Object.values(config)) {
+      const inputs = Array.isArray(category?.inputs) ? category.inputs : [];
+      const targets = Array.isArray(category?.targets) ? category.targets : [];
+      const pool = inputs.concat(targets);
+      for (const item of pool) {
+        if (item?.role !== role) continue;
+        const value = item?.value ?? item?.entity_id;
+        const numeric = Number(String(value).replace(",", "."));
+        if (Number.isFinite(numeric)) return numeric;
+      }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    let active = true;
+    fetchConfig()
+      .then((config) => {
+        if (!active) return;
+        const vpdMin = resolveRoleValue(config, "vpd_day_min");
+        const vpdMax = resolveRoleValue(config, "vpd_day_max");
+        const vwcMin = resolveRoleValue(config, "vwc_day_min");
+        const vwcMax = resolveRoleValue(config, "vwc_day_max");
+        const ecMin = resolveRoleValue(config, "ecp_day_min");
+        const ecMax = resolveRoleValue(config, "ecp_day_max");
+        const phTarget = resolveRoleValue(config, "ph_target");
+        setTargets({
+          vpd: { min: vpdMin ?? undefined, max: vpdMax ?? undefined },
+          vwc: { min: vwcMin ?? undefined, max: vwcMax ?? undefined },
+          ec: { min: ecMin ?? undefined, max: ecMax ?? undefined },
+          ph:
+            typeof phTarget === "number"
+              ? { min: phTarget - 0.2, max: phTarget + 0.2 }
+              : {},
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setTargets(emptyTargets);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const series = useMemo(
     () =>
       METRICS.map((metric) => ({
@@ -213,6 +295,7 @@ export function JournalMetricsChart({
             points={metric.values}
             highlightEntryId={highlightEntryId}
             onSelectEntry={onSelectEntry}
+            targetRange={targets[metric.key]}
           />
         ))}
       </div>

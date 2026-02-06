@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Language, ManagedPlan, PlanOptimizationResponse, NutrientProfile } from "../types";
+import type { Language, ManagedPlan, PlanOptimizationResponse, NutrientProfile, Substrate } from "../types";
 import { optimizePlanWithTargets, type PlanOptimizerWeekInput } from "../services/aiService";
+import { fetchWaterProfilePresets, type WaterProfilePreset } from "../services/planService";
 import { useToast } from "./ToastProvider";
 
 const NUTRIENTS = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
@@ -30,7 +31,7 @@ export function PlanOptimizerModal({
   plan: ManagedPlan;
   lang: Language;
   cultivar: string;
-  substrate: string;
+  substrate: Substrate;
   onApply: (plan: PlanOptimizationResponse) => void;
 }) {
   const [weeks, setWeeks] = useState<PlanOptimizerWeekInput[]>(() => buildWeeks(plan));
@@ -39,31 +40,8 @@ export function PlanOptimizerModal({
   const [waterProfile, setWaterProfile] = useState<NutrientProfile>({ ...plan.waterProfile });
   const [osmosisShare, setOsmosisShare] = useState<string>(() => (plan.osmosisShare * 100).toFixed(1));
   const [presetId, setPresetId] = useState("default");
+  const [presets, setPresets] = useState<WaterProfilePreset[]>([]);
   const { addToast } = useToast();
-
-  const presets = useMemo(
-    () => [
-      {
-        id: "default",
-        label: `${substrate} Default`,
-        profile: { ...plan.waterProfile },
-        osmosis: (plan.osmosisShare * 100).toFixed(1),
-      },
-      {
-        id: "ro50",
-        label: "RO Mix 50%",
-        profile: { ...plan.waterProfile },
-        osmosis: "50.0",
-      },
-      {
-        id: "ro80",
-        label: "RO Mix 80%",
-        profile: { ...plan.waterProfile },
-        osmosis: "80.0",
-      },
-    ],
-    [plan.waterProfile, plan.osmosisShare, substrate]
-  );
 
   useEffect(() => {
     if (isOpen) {
@@ -74,6 +52,18 @@ export function PlanOptimizerModal({
       setPresetId("default");
     }
   }, [isOpen, plan]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchWaterProfilePresets(substrate)
+      .then((data) => {
+        setPresets(data);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        addToast({ title: "Presets laden fehlgeschlagen", description: message, variant: "error" });
+      });
+  }, [isOpen, substrate, addToast]);
 
   const reset = () => {
     setWeeks(buildWeeks(plan));
@@ -204,15 +194,21 @@ export function PlanOptimizerModal({
                   const selected = presets.find((preset) => preset.id === event.target.value);
                   if (!selected) return;
                   setPresetId(selected.id);
-                  setWaterProfile({ ...selected.profile });
-                  setOsmosisShare(selected.osmosis);
+                  setWaterProfile({ ...selected.waterProfile });
+                  setOsmosisShare((selected.osmosisShare * 100).toFixed(1));
                 }}
               >
-                {presets.map((preset) => (
-                  <option key={preset.id} value={preset.id} className="bg-[#070a16]">
-                    {preset.label}
+                {presets.length ? (
+                  presets.map((preset) => (
+                    <option key={preset.id} value={preset.id} className="bg-[#070a16]">
+                      {preset.label}
+                    </option>
+                  ))
+                ) : (
+                  <option value="default" className="bg-[#070a16]">
+                    Default
                   </option>
-                ))}
+                )}
               </select>
             </label>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">

@@ -6,6 +6,13 @@ export interface ActivePlanResponse {
   plan: ManagedPlan;
 }
 
+export interface WaterProfilePreset {
+  id: string;
+  label: string;
+  waterProfile: Record<string, number>;
+  osmosisShare: number;
+}
+
 const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), init);
   if (!response.ok) {
@@ -82,4 +89,10 @@ export const deletePlan = async (
   await requestJson<{ deleted: boolean }>(`/api/plans/custom/${encodeURIComponent(planId)}?${query}`,
     { method: "DELETE" }
   );
+};
+
+export const fetchWaterProfilePresets = async (substrate: Substrate): Promise<WaterProfilePreset[]> => {
+  const query = `substrate=${encodeURIComponent(substrate)}`;
+  const response = await requestJson<{ presets: WaterProfilePreset[] }>(`/api/plans/water-profiles?${query}`);
+  return response.presets || [];
 };
