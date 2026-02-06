@@ -11,9 +11,9 @@ RUN rm -rf public && npm run clean && npm run build && cp -f index.html public/i
 FROM $BUILD_FROM
 SHELL ["/bin/ash","-o","pipefail","-c"]
 RUN apk add --no-cache python3 py3-pip
-ENV VENV=/opt/venv
-RUN python3 -m venv $VENV
-ENV PATH="$VENV/bin:$PATH"
+
+# Allow pip to install to system-wide environment (PEP 668)
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 WORKDIR /app
 COPY backend/ /app/
