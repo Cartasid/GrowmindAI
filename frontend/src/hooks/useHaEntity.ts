@@ -10,6 +10,13 @@ export interface HaEntityState {
   last_updated?: string;
 }
 
+type EntityCacheItem = {
+  etag: string | null;
+  data: HaEntityState | null;
+};
+
+const entityCache = new Map<string, EntityCacheItem>();
+
 const coerceNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -38,12 +45,24 @@ export const useHaEntity = (entityId?: string, pollSeconds: number = 5) => {
       setStatus((prev) => (prev === "ready" ? "ready" : "loading"));
       setError(null);
       try {
-        const res = await fetch(apiUrl(`/api/ha/state/${encodeURIComponent(entityId)}`));
+        const cache = entityCache.get(entityId) ?? { etag: null, data: null };
+        const headers: Record<string, string> = {};
+        if (cache.etag) {
+          headers["If-None-Match"] = cache.etag;
+        }
+        const res = await fetch(apiUrl(`/api/ha/state/${encodeURIComponent(entityId)}`), { headers });
+        if (res.status === 304 && cache.data) {
+          if (!active) return;
+          setRaw(cache.data);
+          setStatus("ready");
+          return;
+        }
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed (${res.status})`);
         }
         const json = (await res.json()) as HaEntityState;
+        entityCache.set(entityId, { etag: res.headers.get("ETag"), data: json });
         if (!active) return;
         setRaw(json);
         setStatus("ready");

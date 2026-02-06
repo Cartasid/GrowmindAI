@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   fetchConfig,
+  fetchHaEntities,
   fetchMappingOverrides,
   fetchSystemInfo,
   importMappingOverrides,
   updateMapping,
   type ConfigMap,
+  type HaEntityInfo,
   type MappingOverrides,
   type SystemInfo,
 } from "../services/configService";
@@ -21,6 +23,8 @@ export function SensorMappingPanel() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, string>>({});
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [entities, setEntities] = useState<HaEntityInfo[]>([]);
+  const [entitiesStatus, setEntitiesStatus] = useState<MappingStatus>("idle");
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -43,6 +47,17 @@ export function SensorMappingPanel() {
       })
       .catch(() => {
         if (active) setSystemInfo(null);
+      });
+    setEntitiesStatus("loading");
+    fetchHaEntities()
+      .then((data) => {
+        if (active) {
+          setEntities(data);
+          setEntitiesStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (active) setEntitiesStatus("error");
       });
     return () => {
       active = false;
@@ -153,6 +168,10 @@ export function SensorMappingPanel() {
         </label>
       </div>
 
+      <div className="mt-3 text-xs text-white/50">
+        Entity-Index: {entitiesStatus === "loading" ? "Laedt" : entitiesStatus === "error" ? "Fehler" : `${entities.length} Eintraege`}
+      </div>
+
       {systemInfo && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-xs text-white/70">
           <p className="meta-mono text-[10px] text-white/40">SYSTEM</p>
@@ -210,6 +229,7 @@ export function SensorMappingPanel() {
                                 }))
                               }
                               placeholder="sensor.my_entity_id"
+                              list="ha-entity-list"
                               className="mt-3 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
                             />
                           </div>
@@ -226,6 +246,13 @@ export function SensorMappingPanel() {
           <p className="text-sm text-white/60">Keine Konfiguration geladen.</p>
         )}
       </div>
+      <datalist id="ha-entity-list">
+        {entities.map((entity) => (
+          <option key={entity.entity_id} value={entity.entity_id}>
+            {entity.friendly_name || entity.entity_id}
+          </option>
+        ))}
+      </datalist>
     </section>
   );
 }

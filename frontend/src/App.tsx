@@ -155,6 +155,21 @@ function App() {
 
   const activeMeta = sectionMeta[activeSection];
 
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (hash && Object.keys(sectionMeta).includes(hash)) {
+      setActiveSection(hash as SectionKey);
+    }
+    const handler = () => {
+      const next = window.location.hash.replace("#", "");
+      if (next && Object.keys(sectionMeta).includes(next)) {
+        setActiveSection(next as SectionKey);
+      }
+    };
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, []);
+
   const alarmRoles = ["leak_detected", "pump_dry", "sensor_fault"];
 
   const vpd = useSensorStatus({
@@ -275,7 +290,10 @@ function App() {
               return (
                 <button
                   key={link.key}
-                  onClick={() => setActiveSection(link.key)}
+                  onClick={() => {
+                    setActiveSection(link.key);
+                    window.history.replaceState(null, "", `#${link.key}`);
+                  }}
                   className={`group flex w-auto min-w-[160px] items-center justify-between rounded-2xl border px-4 py-3 text-left text-base transition lg:w-full lg:min-w-0 ${
                     isActive
                       ? "border-brand-cyan/40 bg-gradient-to-r from-brand-cyan/15 via-brand-blue/10 to-brand-purple/20 text-white shadow-brand-glow"

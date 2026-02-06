@@ -591,6 +591,36 @@ async def read_ha_state(entity_id: str, request: Request) -> Response:
         raise HTTPException(status_code=502, detail="Failed to read Home Assistant state.") from exc
 
 
+@app.get("/api/ha/entities")
+async def read_ha_entities(request: Request) -> Response:
+    try:
+        client = await _hass()
+        response = await client.get("/states", headers=_hass_headers())
+        response.raise_for_status()
+        payload = []
+        for item in response.json():
+            if not isinstance(item, dict):
+                continue
+            entity_id = item.get("entity_id")
+            if not entity_id:
+                continue
+            attributes = item.get("attributes") or {}
+            payload.append({
+                "entity_id": entity_id,
+                "friendly_name": attributes.get("friendly_name"),
+            })
+        etag = _etag_for_payload(payload)
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304)
+        return JSONResponse(payload, headers={"ETag": etag})
+    except httpx.HTTPStatusError as exc:
+        logger.warning("HA entities read failed: %s", exc)
+        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant entities read failed.") from exc
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to read HA entities: %s", exc)
+        raise HTTPException(status_code=502, detail="Failed to read Home Assistant entities.") from exc
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
