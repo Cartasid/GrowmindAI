@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -13,6 +14,29 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = "/data/growmind.db"
 FALLBACK_DB_PATH = "/tmp/growmind.db"
+
+
+class InvalidIdentifierError(ValueError):
+    """Raised when a collection/key identifier is invalid."""
+
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_MAX_IDENTIFIER_LENGTH = 128
+
+
+def _validate_identifier(value: str, label: str, *, max_length: int = _MAX_IDENTIFIER_LENGTH) -> str:
+    if not isinstance(value, str):
+        raise InvalidIdentifierError(f"Invalid {label}: expected string")
+    cleaned = value.strip()
+    if not cleaned:
+        raise InvalidIdentifierError(f"Invalid {label}: empty value")
+    if len(cleaned) > max_length:
+        raise InvalidIdentifierError(f"Invalid {label}: exceeds {max_length} characters")
+    if not _IDENTIFIER_RE.match(cleaned):
+        raise InvalidIdentifierError(
+            f"Invalid {label}: only letters, numbers, '.', '_', '-', ':' allowed"
+        )
+    return cleaned
 
 
 def _resolve_db_path() -> Path:
@@ -57,7 +81,7 @@ class GrowMindDB:
         self._initialized = True
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.path), check_same_thread=False, timeout=10.0)
+        conn = sqlite3.connect(str(self.path), timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
@@ -99,6 +123,7 @@ class GrowMindDB:
     # --- Collection Methods ---
 
     def get_collection(self, category: str) -> Dict[str, Any]:
+        category = _validate_identifier(category, "category")
         with self._get_connection() as conn:
             cursor = conn.execute(
                 "SELECT key, value FROM collections WHERE category = ?", (category,)
@@ -106,18 +131,22 @@ class GrowMindDB:
             return {row["key"]: json.loads(row["value"]) for row in cursor.fetchall()}
 
     def set_collection(self, category: str, data: Dict[str, Any]):
+        category = _validate_identifier(category, "category")
+        cleaned: Dict[str, Any] = {}
+        for key, value in (data or {}).items():
+            cleaned[_validate_identifier(key, "key")] = value
         with self._get_connection() as conn:
-            if not data:
+            if not cleaned:
                 conn.execute("DELETE FROM collections WHERE category = ?", (category,))
             else:
                 # Delete keys that are no longer present
-                placeholders = ", ".join("?" for _ in data)
+                placeholders = ", ".join("?" for _ in cleaned)
                 conn.execute(
                     f"DELETE FROM collections WHERE category = ? AND key NOT IN ({placeholders})",
-                    (category, *data.keys())
+                    (category, *cleaned.keys())
                 )
                 # Upsert new/updated values
-                for key, val in data.items():
+                for key, val in cleaned.items():
                     conn.execute(
                         """
                         INSERT INTO collections (category, key, value, updated_at)
@@ -131,6 +160,8 @@ class GrowMindDB:
             conn.commit()
 
     def get_collection_key(self, category: str, key: str, default: Any = None) -> Any:
+        category = _validate_identifier(category, "category")
+        key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
             cursor = conn.execute(
                 "SELECT value FROM collections WHERE category = ? AND key = ?",
@@ -140,6 +171,8 @@ class GrowMindDB:
             return json.loads(row["value"]) if row else default
 
     def set_collection_key(self, category: str, key: str, value: Any):
+        category = _validate_identifier(category, "category")
+        key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -154,6 +187,8 @@ class GrowMindDB:
             conn.commit()
 
     def delete_collection_key(self, category: str, key: str):
+        category = _validate_identifier(category, "category")
+        key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
             conn.execute(
                 "DELETE FROM collections WHERE category = ? AND key = ?",
@@ -216,12 +251,14 @@ class GrowMindDB:
     # --- Settings Methods ---
 
     def get_setting(self, key: str, default: Any = None) -> Any:
+        key = _validate_identifier(key, "setting key")
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
             row = cursor.fetchone()
             return json.loads(row["value"]) if row else default
 
     def set_setting(self, key: str, value: Any):
+        key = _validate_identifier(key, "setting key")
         with self._get_connection() as conn:
             conn.execute(
                 """

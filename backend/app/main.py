@@ -4,15 +4,21 @@ import logging
 import math
 import os
 import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.websockets import WebSocketState
 
+from .database import InvalidIdentifierError
 from .plan_routes import router as plan_router
 from .journal_routes import router as journal_router
 from .ai_routes import router as ai_router
@@ -24,6 +30,91 @@ from .utils import load_mapping
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 logging.getLogger().setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_ENV_KEYS = ("SUPERVISOR_TOKEN", "HASS_TOKEN", "GEMINI_API_KEY", "TELEMETRY_API_KEY")
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, value)
+
+
+def _env_float(name: str, default: float, *, minimum: float = 0.0) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, value)
+
+
+def _validate_hass_api_base(value: str) -> str:
+    cleaned = (value or "").strip()
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("HASS_API_BASE must be a valid http/https URL")
+    return cleaned.rstrip("/")
+
+
+def _parse_csv_env(name: str) -> List[str]:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _sensitive_values() -> List[str]:
+    values = []
+    for key in _SENSITIVE_ENV_KEYS:
+        value = os.getenv(key)
+        if value:
+            values.append(value)
+    return values
+
+
+def _redact_message(message: str) -> str:
+    redacted = message
+    for value in _sensitive_values():
+        if value:
+            redacted = redacted.replace(value, "***")
+    return redacted
+
+
+class SensitiveValueFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+        redacted = _redact_message(message)
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+
+logging.getLogger().addFilter(SensitiveValueFilter())
+
+HASS_API_BASE = _validate_hass_api_base(os.getenv("HASS_API_BASE", "http://supervisor/core/api"))
+CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
+RATE_LIMIT_WINDOW_SECONDS = _env_float("RATE_LIMIT_WINDOW_SECONDS", 60.0, minimum=1.0)
+RATE_LIMIT_MAX_REQUESTS = _env_int("RATE_LIMIT_MAX_REQUESTS", 120, minimum=0)
+RATE_LIMIT_TRUSTED_IPS = set(_parse_csv_env("RATE_LIMIT_TRUSTED_IPS"))
+WS_MAX_ERRORS = _env_int("WS_MAX_ERRORS", 6)
+
+_rate_limit_lock = asyncio.Lock()
+_rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
+_hass_lock = asyncio.Lock()
+_notify_lock = asyncio.Lock()
+_warned_missing_alerts = False
 
 _telemetry_task: Optional[asyncio.Task[Any]] = None
 _telemetry_stop: Optional[asyncio.Event] = None
@@ -54,6 +145,40 @@ async def lifespan(application: FastAPI):
 
 INGRESS_PATH = os.getenv("INGRESS_PATH", "")
 app = FastAPI(title="GrowMind AI", lifespan=lifespan, root_path=INGRESS_PATH)
+if CORS_ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ALLOWED_ORIGINS,
+        allow_headers=["*"],
+        allow_methods=["*"],
+    )
+else:
+    logger.info("CORS_ALLOWED_ORIGINS not set; CORS middleware disabled.")
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if RATE_LIMIT_MAX_REQUESTS <= 0:
+        return await call_next(request)
+    client_ip = request.client.host if request.client else "unknown"
+    if client_ip in RATE_LIMIT_TRUSTED_IPS:
+        return await call_next(request)
+    now = time.time()
+    async with _rate_limit_lock:
+        bucket = _rate_limit_store[client_ip]
+        cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
+            return JSONResponse({"detail": "Rate limit exceeded."}, status_code=429)
+        bucket.append(now)
+    return await call_next(request)
+
+
+@app.exception_handler(InvalidIdentifierError)
+async def invalid_identifier_handler(request: Request, exc: InvalidIdentifierError):
+    return JSONResponse({"detail": str(exc)}, status_code=400)
+
 app.include_router(plan_router)
 app.include_router(journal_router)
 app.include_router(ai_router)
@@ -68,7 +193,6 @@ class UpdatePayload(BaseModel):
 
 
 MAPPING = load_mapping()
-HASS_API_BASE = os.getenv("HASS_API_BASE", "http://supervisor/core/api")
 
 _UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
 
@@ -89,12 +213,15 @@ def _hass_headers() -> Dict[str, str]:
 
 async def _hass() -> httpx.AsyncClient:
     global _hass_client
-    if _hass_client is None:
-        _hass_client = httpx.AsyncClient(
-            base_url=HASS_API_BASE,
-            timeout=httpx.Timeout(15.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+    if _hass_client is not None and not _hass_client.is_closed:
+        return _hass_client
+    async with _hass_lock:
+        if _hass_client is None or _hass_client.is_closed:
+            _hass_client = httpx.AsyncClient(
+                base_url=HASS_API_BASE,
+                timeout=httpx.Timeout(15.0),
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
     return _hass_client
 
 
@@ -103,9 +230,17 @@ async def _get_states_map() -> Dict[str, Dict[str, Any]]:
         client = await _hass()
         response = await client.get("/states", headers=_hass_headers())
         response.raise_for_status()
+        payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Failed to read HA states (status %s).", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="Failed to read Home Assistant states.") from exc
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to read HA states: {exc}") from exc
-    return {item["entity_id"]: item for item in response.json()}
+        logger.warning("Failed to read HA states: %s", exc)
+        raise HTTPException(status_code=502, detail="Failed to read Home Assistant states.") from exc
+    except (ValueError, TypeError) as exc:
+        logger.warning("Invalid HA states payload: %s", exc)
+        raise HTTPException(status_code=502, detail="Invalid Home Assistant states payload.") from exc
+    return {item["entity_id"]: item for item in payload}
 
 
 def _coerce_float(value: Optional[str]) -> float:
@@ -194,13 +329,11 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
             if eid:
                 alarm_entities.append(eid)
 
-    # Fallback to defaults if mapping is missing or empty
     if not alarm_entities:
-        alarm_entities = [
-            "binary_sensor.grow_leak_detected",
-            "binary_sensor.grow_pump_dry",
-            "binary_sensor.grow_sensor_fault",
-        ]
+        global _warned_missing_alerts
+        if not _warned_missing_alerts:
+            logger.warning("system_alerts.targets missing from mapping.json; alarms disabled.")
+            _warned_missing_alerts = True
 
     alarms_active: List[str] = []
     for eid in alarm_entities:
@@ -221,11 +354,13 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
 
 async def _notify_failsafe(health: Dict[str, Any]):
     global _last_notify_time
-    if not health.get("failsafe"): return
-    now = time.time()
-    if now - _last_notify_time < 3600: return # Rate limit: 1 hour
-
-    _last_notify_time = now
+    if not health.get("failsafe"):
+        return
+    async with _notify_lock:
+        now = time.time()
+        if now - _last_notify_time < 3600:
+            return  # Rate limit: 1 hour
+        _last_notify_time = now
     message = "GrowMind AI detected critical system issues: " + ", ".join(health["alarms_active"] + health["sensor_issues"][:3])
     try:
         await _invoke_service("persistent_notification", "create", {
@@ -308,10 +443,11 @@ async def _invoke_service(domain: str, service: str, payload: Dict[str, Any]) ->
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        detail = exc.response.json() if exc.response.content else exc.response.text
-        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+        logger.warning("HA service call failed (%s/%s): %s", domain, service, exc)
+        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant service call failed.") from exc
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to call HA service: {exc}") from exc
+        logger.warning("Failed to call HA service (%s/%s): %s", domain, service, exc)
+        raise HTTPException(status_code=502, detail="Failed to call Home Assistant service.") from exc
 
 
 @app.get("/api/ha/state/{entity_id}")
@@ -322,10 +458,11 @@ async def read_ha_state(entity_id: str) -> Dict[str, Any]:
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as exc:
-        detail = exc.response.json() if exc.response.content else exc.response.text
-        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+        logger.warning("HA state read failed (%s): %s", entity_id, exc)
+        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant state read failed.") from exc
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to read HA state: {exc}") from exc
+        logger.warning("Failed to read HA state (%s): %s", entity_id, exc)
+        raise HTTPException(status_code=502, detail="Failed to read Home Assistant state.") from exc
 
 
 @app.get("/health")
@@ -415,16 +552,27 @@ async def lighting_websocket(websocket: WebSocket):
                 logger.warning("WS lighting: HA request failed (%s), attempt %d", exc.detail, consecutive_errors)
                 delay = min(delay * 1.5, 60.0)
             except WebSocketDisconnect:
-                return
+                break
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 consecutive_errors += 1
                 logger.exception("WS lighting: unexpected error, attempt %d: %s", consecutive_errors, exc)
                 delay = min(delay * 2.0, 60.0)
+            if consecutive_errors >= WS_MAX_ERRORS:
+                logger.error("WS lighting: too many consecutive errors, closing connection.")
+                break
             await asyncio.sleep(delay)
     except WebSocketDisconnect:
-        return
+        pass
     except Exception as exc:
         logger.exception("WS lighting: fatal error: %s", exc)
+    finally:
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
 
 
 # --- Static mount ---

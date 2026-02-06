@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import math
 import os
 import random
@@ -17,10 +18,7 @@ from google.genai import errors, types
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
-
-CLIENT: Optional[genai.Client] = None
-_CLIENT_TIMEOUT_MS: Optional[int] = None
-_MODEL_NAME: Optional[str] = None
+logger = logging.getLogger(__name__)
 _RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
 DEFAULT_MODEL = "models/gemini-2.5-flash"
 
@@ -85,36 +83,23 @@ def _seconds_to_ms(seconds: float) -> int:
 
 
 def _client(timeout_seconds: Optional[float] = None) -> genai.Client:
-    global CLIENT, _CLIENT_TIMEOUT_MS
     timeout_ms = _seconds_to_ms(timeout_seconds or _retry_settings()["timeout"])
-    if CLIENT is None or _CLIENT_TIMEOUT_MS != timeout_ms:
-        CLIENT = genai.Client(
-            api_key=_api_key(),
-            http_options=types.HttpOptions(api_version="v1beta", timeout=timeout_ms),
-        )
-        _CLIENT_TIMEOUT_MS = timeout_ms
-    return CLIENT
-
-
-def _reset_client() -> None:
-    global CLIENT, _CLIENT_TIMEOUT_MS
-    CLIENT = None
-    _CLIENT_TIMEOUT_MS = None
+    return genai.Client(
+        api_key=_api_key(),
+        http_options=types.HttpOptions(api_version="v1beta", timeout=timeout_ms),
+    )
 
 
 def _model() -> str:
-    global _MODEL_NAME
-    if _MODEL_NAME is None:
-        model = os.getenv("GEMINI_MODEL", "").strip()
-        if not model:
-            options = _read_addon_options()
-            model = str(options.get("gemini_model") or "").strip()
-        if not model:
-            model = DEFAULT_MODEL
-        if not model.startswith("models/"):
-            model = f"models/{model}"
-        _MODEL_NAME = model
-    return _MODEL_NAME
+    model = os.getenv("GEMINI_MODEL", "").strip()
+    if not model:
+        options = _read_addon_options()
+        model = str(options.get("gemini_model") or "").strip()
+    if not model:
+        model = DEFAULT_MODEL
+    if not model.startswith("models/"):
+        model = f"models/{model}"
+    return model
 
 
 def _retry_settings() -> Dict[str, Union[int, float]]:
@@ -154,6 +139,11 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, value)
+
+
+ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_BYTES = _env_int("GEMINI_MAX_IMAGE_BYTES", 5_000_000, minimum=1)
+MAX_IMAGE_COUNT = _env_int("GEMINI_MAX_IMAGE_COUNT", 4, minimum=1)
 
 
 def _is_thinking_model(model_name: str) -> bool:
@@ -262,7 +252,6 @@ async def _generate_json_with_retry(
                 await asyncio.sleep(delay + jitter)
                 delay = min(delay * 2.0, max_delay)
                 client = None
-                _reset_client()
                 continue
             raise
 
@@ -326,13 +315,26 @@ def _decode_data_uri_or_b64(value: str) -> Tuple[bytes, str]:
         mime_type = match.group(1).strip() or mime_type
         payload = match.group(2).strip()
 
+    mime_type = mime_type.lower().strip()
+    if mime_type == "image/jpg":
+        mime_type = "image/jpeg"
+    if mime_type not in ALLOWED_IMAGE_MIME:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+
+    payload = re.sub(r"\s+", "", payload)
+    max_payload_len = int(MAX_IMAGE_BYTES * 4 / 3) + 4
+    if len(payload) > max_payload_len:
+        raise HTTPException(status_code=400, detail="Image payload too large")
+
     try:
-        decoded = base64.b64decode(payload, validate=False)
+        decoded = base64.b64decode(payload, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image payload: {exc}") from exc
 
     if not decoded:
         raise HTTPException(status_code=400, detail="Decoded image is empty")
+    if len(decoded) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image exceeds size limit")
     return decoded, mime_type
 
 
@@ -431,7 +433,6 @@ async def _generate_text_with_retry(
                 await asyncio.sleep(delay + jitter)
                 delay = min(delay * 2.0, max_delay)
                 client = None
-                _reset_client()
                 continue
             raise
 
@@ -446,6 +447,8 @@ async def analyze_image(payload: AnalyzeImagePayload):
     _ = _api_key()
     if not payload.imagesBase64:
         return JSONResponse({"error": "No images provided."}, status_code=400)
+    if len(payload.imagesBase64) > MAX_IMAGE_COUNT:
+        return JSONResponse({"error": "Too many images provided."}, status_code=400)
     instruction = payload.prompt or _build_image_prompt(payload)
     user_parts = [types.Part.from_text(text=instruction)]
     for image in payload.imagesBase64:
@@ -463,11 +466,13 @@ async def analyze_image(payload: AnalyzeImagePayload):
             return JSONResponse({"error": "No model output."}, status_code=502)
         return {"potentialIssues": [], "recommendedActions": [], "disclaimer": fallback}
     except errors.APIError as exc:
-        return JSONResponse({"error": f"APIError {exc.code}: {exc.message}"}, status_code=502)
+        logger.warning("Gemini analyze-image failed (%s)", exc.code)
+        return JSONResponse({"error": "Gemini API error."}, status_code=502)
     except HTTPException:
         raise
     except Exception as exc:
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+        logger.exception("Gemini analyze-image failed")
+        return JSONResponse({"error": "Failed to analyze image."}, status_code=500)
 
 
 @router.post("/analyze-stage")
@@ -483,11 +488,13 @@ async def analyze_stage(payload: StagePayload):
             return JSONResponse({"error": "No model output."}, status_code=502)
         return {"stage": "Vegetative", "confidence": "Low", "reasoning": fallback}
     except errors.APIError as exc:
-        return JSONResponse({"error": f"APIError {exc.code}: {exc.message}"}, status_code=502)
+        logger.warning("Gemini analyze-stage failed (%s)", exc.code)
+        return JSONResponse({"error": "Gemini API error."}, status_code=502)
     except HTTPException:
         raise
     except Exception as exc:
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+        logger.exception("Gemini analyze-stage failed")
+        return JSONResponse({"error": "Failed to analyze stage."}, status_code=500)
 
 
 @router.post("/optimize-plan")
@@ -505,11 +512,13 @@ async def optimize_plan(payload: PlanOptimizationPayload):
             return JSONResponse({"error": "No model output."}, status_code=502)
         return {"plan": [], "summary": fallback}
     except errors.APIError as exc:
-        return JSONResponse({"error": f"APIError {exc.code}: {exc.message}"}, status_code=502)
+        logger.warning("Gemini optimize-plan failed (%s)", exc.code)
+        return JSONResponse({"error": "Gemini API error."}, status_code=502)
     except HTTPException:
         raise
     except Exception as exc:
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+        logger.exception("Gemini optimize-plan failed")
+        return JSONResponse({"error": "Failed to optimize plan."}, status_code=500)
 
 
 @router.post("/analyze-text")
@@ -522,8 +531,10 @@ async def analyze_text(payload: AnalyzeTextPayload):
         result = await _generate_text_with_retry(prompt, max_tokens=1024, temperature=0.4)
         return {"result": result}
     except errors.APIError as exc:
-        return JSONResponse({"error": f"APIError {exc.code}: {exc.message}"}, status_code=502)
+        logger.warning("Gemini analyze-text failed (%s)", exc.code)
+        return JSONResponse({"error": "Gemini API error."}, status_code=502)
     except HTTPException:
         raise
     except Exception as exc:
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+        logger.exception("Gemini analyze-text failed")
+        return JSONResponse({"error": "Failed to analyze text."}, status_code=500)
