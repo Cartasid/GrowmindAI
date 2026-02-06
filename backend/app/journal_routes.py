@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .storage import get_collection, set_collection
+from .storage import get_collection_key, set_collection_key
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
 
@@ -88,14 +88,11 @@ def _journal_key(grow_id: str) -> str:
 
 
 def _load_entries(grow_id: str) -> List[Dict[str, Any]]:
-    store = get_collection(JOURNAL_COLLECTION)
-    return store.get(_journal_key(grow_id), [])
+    return get_collection_key(JOURNAL_COLLECTION, _journal_key(grow_id), [])
 
 
 def _save_entries(grow_id: str, entries: List[Dict[str, Any]]) -> None:
-    store = get_collection(JOURNAL_COLLECTION)
-    store[_journal_key(grow_id)] = entries
-    set_collection(JOURNAL_COLLECTION, store)
+    set_collection_key(JOURNAL_COLLECTION, _journal_key(grow_id), entries)
 
 
 def _normalize_entry(payload: JournalEntryPayload) -> Dict[str, Any]:

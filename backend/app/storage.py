@@ -10,6 +10,9 @@ def get_collection(collection: str) -> Dict[str, Any]:
 def set_collection(collection: str, payload: Dict[str, Any]) -> None:
     db.set_collection(collection, payload)
 
+def get_collection_key(collection: str, key: str, default: Any = None) -> Any:
+    return db.get_collection_key(collection, key, default)
+
 def set_collection_key(collection: str, key: str, value: Any) -> None:
     db.set_collection_key(collection, key, value)
 
