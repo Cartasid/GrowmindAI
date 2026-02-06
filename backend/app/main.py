@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 import hashlib
 import json
 import logging
@@ -33,6 +34,11 @@ from .operations_routes import router as operations_router
 from .telemetry import telemetry_worker, shutdown_worker
 from .utils import load_mapping
 from .sanitization import InputSanitizer
+
+warnings.filterwarnings(
+    "ignore",
+    message=r".*built-in function any.*not a Python type.*",
+)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 logging.getLogger().setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
