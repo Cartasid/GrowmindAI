@@ -78,12 +78,15 @@ def _parse_csv_env(name: str) -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 HASS_API_BASE = _validate_hass_api_base(os.getenv("HASS_API_BASE", "http://supervisor/core/api"))
+INGRESS_PATH = os.getenv("INGRESS_PATH", "")
 CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
 RATE_LIMIT_WINDOW_SECONDS = _env_float("RATE_LIMIT_WINDOW_SECONDS", 60.0, minimum=1.0)
 RATE_LIMIT_MAX_REQUESTS = _env_int("RATE_LIMIT_MAX_REQUESTS", 120, minimum=0)
 RATE_LIMIT_TRUSTED_IPS = set(_parse_csv_env("RATE_LIMIT_TRUSTED_IPS"))
 WS_MAX_ERRORS = _env_int("WS_MAX_ERRORS", 6)
 RATE_LIMIT_CLEANUP_INTERVAL = _env_float("RATE_LIMIT_CLEANUP_INTERVAL", 300.0, minimum=10.0)
+if INGRESS_PATH and RATE_LIMIT_MAX_REQUESTS > 0:
+    RATE_LIMIT_MAX_REQUESTS = 0
 
 # Token handling - clarify usage
 SUPERVISOR_TOKEN = os.getenv("SUPERVISOR_TOKEN", "").strip()
@@ -160,7 +163,6 @@ async def lifespan(application: FastAPI):
         _hass_client = None
 
 
-INGRESS_PATH = os.getenv("INGRESS_PATH", "")
 app = FastAPI(title="GrowMind AI", lifespan=lifespan, root_path=INGRESS_PATH)
 # Set CORS defaults if not configured
 if not CORS_ALLOWED_ORIGINS:
@@ -224,6 +226,11 @@ class MappingOverridePayload(BaseModel):
 
 class MappingImportPayload(BaseModel):
     overrides: Dict[str, Any]
+
+
+class AutomationTogglePayload(BaseModel):
+    entity_id: str
+    enabled: bool
 
 
 BASE_MAPPING = load_mapping()
@@ -639,6 +646,35 @@ async def read_ha_entities(request: Request) -> Response:
     except httpx.HTTPError as exc:
         logger.warning("Failed to read HA entities: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to read Home Assistant entities.") from exc
+
+
+@app.get("/api/ha/automations")
+async def read_ha_automations() -> Dict[str, Any]:
+    state_map = await _get_states_map()
+    automations = []
+    for entity_id, item in state_map.items():
+        if not entity_id.startswith("automation."):
+            continue
+        attributes = item.get("attributes") or {}
+        automations.append({
+            "entity_id": entity_id,
+            "name": attributes.get("friendly_name") or entity_id,
+            "state": item.get("state"),
+            "last_triggered": attributes.get("last_triggered"),
+            "description": attributes.get("description"),
+        })
+    automations.sort(key=lambda entry: str(entry.get("name", "")).lower())
+    return {"automations": automations}
+
+
+@app.post("/api/ha/automations/set")
+async def set_ha_automation(payload: AutomationTogglePayload) -> Dict[str, Any]:
+    entity_id = InputSanitizer.sanitize_identifier(payload.entity_id)
+    if not entity_id.startswith("automation."):
+        raise HTTPException(status_code=400, detail="Entity must be an automation")
+    service = "turn_on" if payload.enabled else "turn_off"
+    await _invoke_service(domain="automation", service=service, payload={"entity_id": entity_id})
+    return {"status": "ok"}
 
 
 @app.get("/health")

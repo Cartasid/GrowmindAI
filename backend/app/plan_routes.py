@@ -1,7 +1,6 @@
 """Plan management endpoints ported from the PhotonFlux add-on."""
 from __future__ import annotations
 
-import json
 import math
 import uuid
 from copy import deepcopy
@@ -12,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .storage import get_collection_key, set_collection_key
+from .utils import load_mapping
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
 
@@ -289,17 +289,6 @@ def _water_profile_presets(substrate: SubstrateLiteral) -> List[Dict[str, Any]]:
     ]
 
 
-def _read_addon_options() -> Dict[str, Any]:
-    try:
-        with open("/data/options.json", "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-            return data if isinstance(data, dict) else {}
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
-
-
 def _coerce_float(value: Any, default: float) -> float:
     try:
         if value is None:
@@ -334,37 +323,28 @@ def _merge_water_profile(base_profile: Dict[str, float], override: Any) -> Dict[
 
 
 def _configured_base_water_profile() -> Dict[str, float]:
-    options = _read_addon_options()
-    raw_profile: Any = options.get("water_profile_base")
-    if isinstance(raw_profile, str):
-        raw_profile = raw_profile.strip()
-        if raw_profile:
-            try:
-                raw_profile = json.loads(raw_profile)
-            except json.JSONDecodeError:
-                raw_profile = None
-        else:
-            raw_profile = None
-    if not isinstance(raw_profile, dict):
-        raw_profile = None
+    config = _load_water_profile_config()
+    raw_profile = config.get("base") if isinstance(config, dict) else None
     return _merge_water_profile(DEFAULT_WATER_PROFILE, raw_profile)
+
+
+def _load_water_profile_config() -> Dict[str, Any]:
+    try:
+        mapping = load_mapping()
+    except Exception:
+        return {}
+    if not isinstance(mapping, dict):
+        return {}
+    return mapping.get("water_profiles") or {}
 
 
 def _configured_water_profile_presets(
     substrate: SubstrateLiteral, base_profile: Dict[str, float], base_osmosis: float
 ) -> List[Dict[str, Any]]:
-    options = _read_addon_options()
-    raw_presets: Any = options.get("water_profile_presets")
-    if isinstance(raw_presets, str):
-        raw_presets = raw_presets.strip()
-        if not raw_presets:
-            return []
-        try:
-            raw_presets = json.loads(raw_presets)
-        except json.JSONDecodeError:
-            return []
-    if isinstance(raw_presets, dict):
-        raw_presets = raw_presets.get("presets")
+    config = _load_water_profile_config()
+    raw_presets: Any = None
+    if isinstance(config, dict):
+        raw_presets = config.get("presets")
     if not isinstance(raw_presets, list):
         return []
 

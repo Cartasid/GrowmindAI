@@ -33,6 +33,12 @@
         "label": "Phase Duration",
         "entity_id": "sensor.crop_phase_duration",
         "unit": "days"
+      },
+      {
+        "role": "day_in_week",
+        "label": "Day in Week",
+        "entity_id": "sensor.crop_day_in_week",
+        "unit": "day"
       }
     ]
   },
@@ -486,5 +492,43 @@
         "description": "Aufnahme-Booster (Liquid)."
       }
     }
+  },
+  "water_profiles": {
+    "base": {
+      "N": 0.03882590110495415,
+      "Ca": 65.8,
+      "Mg": 31.8,
+      "K": 1.8,
+      "Na": 7.8,
+      "Cl": 18.0,
+      "S": 70.43,
+      "Fe": 0.01,
+      "Mn": 0.01,
+      "B": 0.01,
+      "Mo": 0.01,
+      "Zn": 0.01,
+      "Cu": 0.01,
+      "P": 0.0
+    },
+    "presets": [
+      {
+        "id": "default",
+        "label": "Default",
+        "substrate": "all",
+        "osmosisShare": 0.4
+      },
+      {
+        "id": "ro50",
+        "label": "RO Mix 50%",
+        "substrate": "all",
+        "osmosisShare": 0.5
+      },
+      {
+        "id": "ro80",
+        "label": "RO Mix 80%",
+        "substrate": "all",
+        "osmosisShare": 0.8
+      }
+    ]
   }
 }

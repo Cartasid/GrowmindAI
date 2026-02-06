@@ -4,7 +4,6 @@ import {
   Leaf,
   Thermometer,
   Waves,
-  Wind,
   type LucideIcon
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -17,6 +16,9 @@ import { SensorMappingPanel } from "./components/SensorMappingPanel";
 import { CropSteeringPanel } from "./components/CropSteeringPanel";
 import { PlantAnalyzerPanel } from "./components/PlantAnalyzerPanel";
 import { GrowManagerPanel } from "./components/GrowManagerPanel";
+import { ClimateTargetsPanel } from "./components/ClimateTargetsPanel";
+import { LightingControlPanel } from "./components/LightingControlPanel";
+import { AutomationsPanel } from "./components/AutomationsPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
@@ -31,31 +33,7 @@ type Metric = {
   icon: LucideIcon;
 };
 
-type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering" | "grows";
-
-const climateMetrics: Metric[] = [
-  {
-    label: "Temperatur",
-    value: "24.6°C",
-    delta: "+0.4°C",
-    secondary: "Soll 24.0°C",
-    icon: Thermometer
-  },
-  {
-    label: "Luftfeuchte",
-    value: "62%",
-    delta: "-1%",
-    secondary: "Soll 60%",
-    icon: Droplets
-  },
-  {
-    label: "Luftfluss",
-    value: "1.8 m/s",
-    delta: "+0.2",
-    secondary: "Zuluft aktiv",
-    icon: Wind
-  }
-];
+type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering" | "grows" | "automations";
 
 const substrateMetrics: Metric[] = [
   {
@@ -85,7 +63,8 @@ const sidebarLinks: { key: SectionKey; label: string }[] = [
   { key: "journal", label: "Journal" },
   { key: "nutrients", label: "Nährstoffrechner" },
   { key: "steering", label: "Crop Steering" },
-  { key: "mapping", label: "Sensor-Mapping" }
+  { key: "mapping", label: "Sensor-Mapping" },
+  { key: "automations", label: "Automationen" }
 ];
 
 const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle: string }> = {
@@ -118,6 +97,11 @@ const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle
     eyebrow: "Lifecycle",
     title: "Grow Manager",
     subtitle: "Mehrere Runs planen und vergleichen"
+  },
+  automations: {
+    eyebrow: "Control",
+    title: "Automationen",
+    subtitle: "Home Assistant Regeln verwalten"
   }
 };
 
@@ -229,6 +213,24 @@ function App() {
     actualRole: "actual_ecp",
     minRole: "ecp_day_min",
     maxRole: "ecp_day_max",
+    alarmRoles,
+    warnRatio: 0.1,
+    pollSeconds: 5,
+  });
+
+  const temp = useSensorStatus({
+    actualRole: "actual_temp",
+    minRole: "temp_day_min",
+    maxRole: "temp_day_max",
+    alarmRoles,
+    warnRatio: 0.1,
+    pollSeconds: 5,
+  });
+
+  const humidity = useSensorStatus({
+    actualRole: "actual_humidity",
+    minRole: "hum_day_min",
+    maxRole: "hum_day_max",
     alarmRoles,
     warnRatio: 0.1,
     pollSeconds: 5,
@@ -447,14 +449,59 @@ function App() {
                               </p>
                             </GlassCard>
                           </motion.div>
-                          {climateMetrics.slice(1).map((metric) => (
-                            <motion.div key={metric.label} variants={fadeUp}>
-                              <GradientCard metric={metric} />
-                            </motion.div>
-                          ))}
+                          <motion.div variants={fadeUp}>
+                            <GlassCard
+                              title="Temperatur"
+                              subtitle="Air Temperature"
+                              icon={<Thermometer className="icon-base icon-lg" />}
+                              status={temp.status}
+                              loading={temp.loading}
+                              value={temp.value}
+                              min={temp.min}
+                              max={temp.max}
+                              rightSlot={
+                                <span className="meta-mono text-[11px] text-white/60">
+                                  {temp.min != null && temp.max != null
+                                    ? `${temp.min.toFixed(1)}–${temp.max.toFixed(1)} °C`
+                                    : "—"}
+                                </span>
+                              }
+                            >
+                              <p className="text-4xl font-light text-white">
+                                {temp.value != null ? `${temp.value.toFixed(1)} °C` : "—"}
+                              </p>
+                            </GlassCard>
+                          </motion.div>
+                          <motion.div variants={fadeUp}>
+                            <GlassCard
+                              title="Luftfeuchte"
+                              subtitle="Relative Humidity"
+                              icon={<Droplets className="icon-base icon-lg" />}
+                              status={humidity.status}
+                              loading={humidity.loading}
+                              value={humidity.value}
+                              min={humidity.min}
+                              max={humidity.max}
+                              rightSlot={
+                                <span className="meta-mono text-[11px] text-white/60">
+                                  {humidity.min != null && humidity.max != null
+                                    ? `${humidity.min.toFixed(0)}–${humidity.max.toFixed(0)} %`
+                                    : "—"}
+                                </span>
+                              }
+                            >
+                              <p className="text-4xl font-light text-white">
+                                {humidity.value != null ? `${humidity.value.toFixed(0)} %` : "—"}
+                              </p>
+                            </GlassCard>
+                          </motion.div>
                         </motion.div>
                       </div>
                     </motion.section>
+
+                    <motion.div variants={fadeUp}>
+                      <ClimateTargetsPanel />
+                    </motion.div>
 
                     <motion.section variants={fadeUp}>
                       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -538,6 +585,10 @@ function App() {
                       <SpectrumAnalyzer />
                     </motion.div>
 
+                    <motion.div variants={fadeUp}>
+                      <LightingControlPanel />
+                    </motion.div>
+
                   </motion.div>
                 )}
                 {activeSection === "journal" && (
@@ -572,6 +623,11 @@ function App() {
                 {activeSection === "mapping" && (
                   <motion.div variants={fadeUp}>
                     <SensorMappingPanel />
+                  </motion.div>
+                )}
+                {activeSection === "automations" && (
+                  <motion.div variants={fadeUp}>
+                    <AutomationsPanel />
                   </motion.div>
                 )}
               </motion.div>
