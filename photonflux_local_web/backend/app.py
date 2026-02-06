@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import logging
 import json
 import base64
 import re
@@ -20,13 +21,25 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # ---------- App / Static ----------
+logger = logging.getLogger(__name__)
 ROOT_PATH = os.getenv("INGRESS_PATH", "")
 PUBLIC_DIR = os.getenv("PUBLIC_DIR", os.path.join(os.path.dirname(__file__), "public"))
+
+def _parse_csv_env(name: str) -> List[str]:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
+if not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = ["http://localhost:8099", "http://localhost:5173"]
+    logger.warning("CORS_ALLOWED_ORIGINS not set; using defaults: %s", CORS_ALLOWED_ORIGINS)
 
 app = FastAPI(root_path=ROOT_PATH)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_headers=["*"],
     allow_methods=["*"],
 )
@@ -64,8 +77,8 @@ def _write_store_unlocked(data: Dict[str, Dict[str, Any]]) -> None:
     try:
         with open(data_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Failed to write store to %s: %s", data_file, exc)
 
 
 def _load_store() -> Dict[str, Dict[str, Any]]:

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 logger = logging.getLogger(__name__)
 _RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
 DEFAULT_MODEL = "models/gemini-2.5-flash"
+DEFAULT_SAFETY_THRESHOLD = "BLOCK_MEDIUM_AND_ABOVE"
 
 
 def _sanitize_text(text: Optional[str], max_length: int = 5000) -> Optional[str]:
@@ -193,6 +194,22 @@ MAX_IMAGE_BYTES = _env_int("GEMINI_MAX_IMAGE_BYTES", 5_000_000, minimum=1)
 MAX_IMAGE_COUNT = _env_int("GEMINI_MAX_IMAGE_COUNT", 4, minimum=1)
 
 
+def _safety_threshold() -> str:
+    raw = os.getenv("GEMINI_SAFETY_THRESHOLD", DEFAULT_SAFETY_THRESHOLD).strip()
+    return raw or DEFAULT_SAFETY_THRESHOLD
+
+
+def _safety_settings() -> List[types.SafetySetting]:
+    threshold = _safety_threshold()
+    return [
+        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold=threshold),
+        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold=threshold),
+        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=threshold),
+        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold=threshold),
+        types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold=threshold),
+    ]
+
+
 def _is_thinking_model(model_name: str) -> bool:
     lowered = model_name.lower()
     return "thinking" in lowered or "gemini-3" in lowered or "gemini-2.0-flash-thinking" in lowered
@@ -273,13 +290,7 @@ async def _generate_json_with_retry(
         config: Dict[str, Any] = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
-            "safety_settings": [
-                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
-            ],
+            "safety_settings": _safety_settings(),
         }
         model_name = _model()
         if _is_thinking_model(model_name):

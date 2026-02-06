@@ -60,6 +60,12 @@ const fadeUp = {
 export function SpectrumAnalyzer() {
   const { lightingEngine, status } = useLightingEngine();
 
+  const targetEntries = Object.entries(lightingEngine.target_spectrum ?? {});
+  const hasTargets = targetEntries.some(([, rawValue]) => {
+    const value = typeof rawValue === "number" ? rawValue : Number(rawValue) || 0;
+    return Number.isFinite(value) && value > 0;
+  });
+
   const totalActual = useMemo(() => {
     const sum = SEGMENTS.reduce((acc, segment) => acc + (lightingEngine.current_spectrum[segment.key] || 0), 0);
     return sum > 0 ? sum : 1;
@@ -166,26 +172,30 @@ export function SpectrumAnalyzer() {
 
           <motion.div variants={fadeUp}>
             <p className="text-xs uppercase tracking-[0.3em] text-white/40">Target</p>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(lightingEngine.target_spectrum).map(([key, rawValue]) => {
-                const mapping = TARGET_MAPPING[key];
-                if (!mapping) return null;
-                const value = typeof rawValue === "number" ? rawValue : Number(rawValue) || 0;
-                return (
-                  <motion.div
-                    key={key}
-                    variants={fadeUp}
-                    className="glass-card flex items-center justify-between rounded-2xl px-4 py-2"
-                  >
-                    <div className="flex items-center gap-2 text-white/70">
-                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: `${mapping.color}66` }} />
-                      {mapping.label}
-                    </div>
-                    <span className="font-semibold text-white">{value.toFixed(0)}%</span>
-                  </motion.div>
-                );
-              })}
-            </div>
+            {hasTargets ? (
+              <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {targetEntries.map(([key, rawValue]) => {
+                  const mapping = TARGET_MAPPING[key];
+                  if (!mapping) return null;
+                  const value = typeof rawValue === "number" ? rawValue : Number(rawValue) || 0;
+                  return (
+                    <motion.div
+                      key={key}
+                      variants={fadeUp}
+                      className="glass-card flex items-center justify-between rounded-2xl px-4 py-2"
+                    >
+                      <div className="flex items-center gap-2 text-white/70">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: `${mapping.color}66` }} />
+                        {mapping.label}
+                      </div>
+                      <span className="font-semibold text-white">{value.toFixed(0)}%</span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-white/50">Keine Zielwerte konfiguriert.</p>
+            )}
           </motion.div>
         </div>
       </motion.div>

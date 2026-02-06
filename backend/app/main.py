@@ -322,8 +322,17 @@ def _build_lighting_engine(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, An
     autopilot_eid = next((i["entity_id"] for i in lighting_def.get("inputs", []) if i.get("role") == "autopilot"), None)
     autopilot_state = state_map.get(autopilot_eid, {}).get("state", "off") if autopilot_eid else "off"
 
+    target_spectrum = {}
+    target_def = MAPPING.get("lighting_targets", {})
+    for target in target_def.get("targets", []):
+        role = target.get("role")
+        eid = target.get("entity_id")
+        if role and eid:
+            target_spectrum[role] = _coerce_float(state_map.get(eid, {}).get("state"))
+
     return {
         "current_spectrum": current,
+        "target_spectrum": target_spectrum,
         "autopilot": autopilot_state == "on",
     }
 
