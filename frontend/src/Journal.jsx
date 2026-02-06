@@ -6,6 +6,9 @@ import { useJournal } from "./hooks/useJournal";
 import { useHaEntity } from "./hooks/useHaEntity";
 import { JournalModal } from "./components/JournalModal";
 import AIJournal from "./AIJournal";
+import { JournalMetricsChart } from "./components/JournalMetricsChart";
+import { GrowthTimeline } from "./components/GrowthTimeline";
+import { PhotoGallery } from "./components/PhotoGallery";
 
 const coerceDate = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -255,6 +258,15 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
       <motion.div variants={staggerContainer} className="mt-8 space-y-10">
         <motion.div variants={fadeUp}>
           <AIJournal entries={sortedEntries} growStartDate={growStartDate?.toISOString()} title="AI JOURNAL LOG" />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <GrowthTimeline entries={sortedEntries} onSelect={(entry) => setExpandedId(entry.id)} />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <JournalMetricsChart entries={sortedEntries} />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <PhotoGallery entries={sortedEntries} onSelect={(entry) => setExpandedId(entry.id)} />
         </motion.div>
         {sortedEntries.length === 0 ? (
           <motion.div variants={fadeUp} className="glass-card rounded-3xl p-6">

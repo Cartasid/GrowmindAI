@@ -19,6 +19,7 @@ export interface TopDressItem {
 export interface MixResponse {
   mix: Record<string, number>;
   top_dress?: TopDressItem[];
+  ppm?: Record<string, number>;
 }
 
 export interface MixConfirmResponse extends MixResponse {

@@ -6,11 +6,13 @@ import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
   fetchNutrientPlan,
+  confirmNutrientMix,
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
 import { optimizePlan } from "../services/aiService";
 import { createPlan, fetchActivePlan, fetchAvailablePlans, setActivePlan } from "../services/planService";
+import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
 
 const CULTIVARS: { value: Cultivar; label: string }[] = [
   { value: "wedding_cake", label: "Wedding Cake" },
@@ -50,6 +52,20 @@ const fadeUp = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } }
 };
 
+const ppmKeys = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
+
+const buildNpkRatio = (ppm: Record<string, number> | undefined) => {
+  if (!ppm) return "—";
+  const n = ppm.N ?? 0;
+  const p = ppm.P ?? 0;
+  const k = ppm.K ?? 0;
+  const values = [n, p, k].filter((value) => value > 0);
+  if (!values.length) return "—";
+  const divisor = Math.min(...values);
+  if (divisor <= 0) return "—";
+  return `${(n / divisor).toFixed(1)}:${(p / divisor).toFixed(1)}:${(k / divisor).toFixed(1)}`;
+};
+
 export function NutrientCalculator() {
   const [cultivar, setCultivar] = useState<Cultivar>("wedding_cake");
   const [substrate, setSubstrate] = useState<Substrate>("coco");
@@ -60,6 +76,7 @@ export function NutrientCalculator() {
   const [result, setResult] = useState<MixResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -228,6 +245,31 @@ export function NutrientCalculator() {
         description: err instanceof Error ? err.message : String(err),
         variant: "error",
       });
+    }
+  };
+
+  const handleConfirmMix = async () => {
+    if (!result) return;
+    setConfirming(true);
+    try {
+      const response = await confirmNutrientMix({
+        current_week: inputs.phase,
+        reservoir_liters: inputs.reservoir,
+        cultivar,
+        substrate,
+      });
+      setResult(response);
+      setInventory({
+        inventory: response.inventory,
+        alerts: response.alerts,
+        refill_needed: response.refill_needed,
+      });
+      addToast({ title: "Mix bestaetigt", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Mix bestaetigen fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -516,6 +558,13 @@ export function NutrientCalculator() {
           >
             {calculating ? "Berechne…" : "Dosis berechnen"}
           </button>
+          <button
+            className="w-full rounded-full border border-grow-lime/40 bg-grow-lime/10 px-5 py-3 text-sm text-grow-lime shadow-neon transition hover:border-grow-lime/60 hover:bg-grow-lime/20"
+            onClick={handleConfirmMix}
+            disabled={!result || confirming}
+          >
+            {confirming ? "Bestaetige…" : "Mix bestaetigen"}
+          </button>
 
           {error && (
             <div className="rounded-2xl border border-brand-red/40 bg-brand-red/10 px-4 py-3 text-sm text-brand-red">
@@ -583,12 +632,33 @@ export function NutrientCalculator() {
                     </tbody>
                   </table>
                 </div>
+
+                {result.ppm && (
+                  <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">PPM Profil</p>
+                      <span className="text-xs text-white/60">NPK {buildNpkRatio(result.ppm)}</span>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {ppmKeys.map((key) => (
+                        <div key={key} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                          <span className="text-xs text-white/60">{key}</span>
+                          <span className="text-sm text-white/90">{(result.ppm?.[key] ?? 0).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="mt-4 text-sm text-white/60">
                 Wähle Cultivar, Plan und Parameter – dann auf „Dosis berechnen“ klicken.
               </p>
             )}
+          </motion.div>
+
+          <motion.div variants={fadeUp}>
+            <MixingInstructionsPanel />
           </motion.div>
 
           {inventory && (
