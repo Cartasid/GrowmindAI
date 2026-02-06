@@ -254,6 +254,7 @@ async def _generate_json_with_retry(
     tries: Optional[int] = None,
     request_timeout: Optional[float] = None,
 ) -> Tuple[Optional[dict], str]:
+    """Generate JSON response with comprehensive retry and error handling."""
     retry = _retry_settings()
     attempt_limit = max(1, int(tries if tries is not None else retry["tries"]))
     timeout_sec = max(1.0, float(request_timeout if request_timeout is not None else retry["timeout"]))
@@ -262,6 +263,7 @@ async def _generate_json_with_retry(
     jitter_ratio = float(retry["jitter_ratio"])
     client: Optional[genai.Client] = None
     last_text = ""
+    last_error: Optional[Exception] = None
 
     for attempt in range(attempt_limit):
         if client is None:
@@ -295,6 +297,7 @@ async def _generate_json_with_retry(
                 config=types.GenerateContentConfig(**config),
             )
         except errors.APIError as exc:
+            last_error = exc
             last_text = f"APIError {exc.code}: {exc.message}"
             if exc.code in _RETRYABLE_API_CODES and attempt < attempt_limit - 1:
                 jitter = random.uniform(0.0, delay * jitter_ratio)
@@ -302,13 +305,49 @@ async def _generate_json_with_retry(
                 delay = min(delay * 2.0, max_delay)
                 client = None
                 continue
-            raise
+            raise HTTPException(status_code=502, detail="Gemini API error") from exc
+        except asyncio.TimeoutError as exc:
+            last_error = exc
+            last_text = "Request timeout"
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                logger.debug(f"Timeout on attempt {attempt + 1}/{attempt_limit}, retrying...")
+                continue
+            raise HTTPException(status_code=504, detail="Request timeout") from exc
+        except (OSError, IOError) as exc:
+            # Network connection errors
+            last_error = exc
+            last_text = f"Connection error: {str(exc)}"
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                logger.debug(f"Connection error on attempt {attempt + 1}/{attempt_limit}, retrying...")
+                continue
+            raise HTTPException(status_code=502, detail="Network error") from exc
+        except Exception as exc:
+            # Unexpected errors
+            last_error = exc
+            logger.exception(f"Unexpected error in _generate_json_with_retry (attempt {attempt + 1}/{attempt_limit})")
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                continue
+            raise HTTPException(status_code=500, detail="Processing error") from exc
 
         last_text = _resp_text(resp)
         parsed = _extract_json(last_text)
         if isinstance(parsed, dict):
             return parsed, last_text
         extra_instruction = "Return only valid minified JSON matching the schema. No extra text."
+    
+    logger.error(f"Failed to get JSON after {attempt_limit} attempts. Last error: {last_error}")
     return None, last_text
 
 
@@ -443,6 +482,7 @@ async def _generate_text_with_retry(
     tries: Optional[int] = None,
     request_timeout: Optional[float] = None,
 ) -> str:
+    """Generate text response with comprehensive retry and error handling."""
     retry = _retry_settings()
     attempt_limit = max(1, int(tries if tries is not None else retry["tries"]))
     timeout_sec = max(1.0, float(request_timeout if request_timeout is not None else retry["timeout"]))
@@ -451,6 +491,7 @@ async def _generate_text_with_retry(
     jitter_ratio = float(retry["jitter_ratio"])
     client: Optional[genai.Client] = None
     last_text = ""
+    last_error: Optional[Exception] = None
 
     for attempt in range(attempt_limit):
         if client is None:
@@ -476,6 +517,7 @@ async def _generate_text_with_retry(
                 config=types.GenerateContentConfig(**config),
             )
         except errors.APIError as exc:
+            last_error = exc
             last_text = f"APIError {exc.code}: {exc.message}"
             if exc.code in _RETRYABLE_API_CODES and attempt < attempt_limit - 1:
                 jitter = random.uniform(0.0, delay * jitter_ratio)
@@ -483,11 +525,44 @@ async def _generate_text_with_retry(
                 delay = min(delay * 2.0, max_delay)
                 client = None
                 continue
-            raise
+            raise HTTPException(status_code=502, detail="Gemini API error") from exc
+        except asyncio.TimeoutError as exc:
+            last_error = exc
+            last_text = "Request timeout"
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                logger.debug(f"Timeout on attempt {attempt + 1}/{attempt_limit}, retrying...")
+                continue
+            raise HTTPException(status_code=504, detail="Request timeout") from exc
+        except (OSError, IOError) as exc:
+            last_error = exc
+            last_text = f"Connection error: {str(exc)}"
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                logger.debug(f"Connection error on attempt {attempt + 1}/{attempt_limit}, retrying...")
+                continue
+            raise HTTPException(status_code=502, detail="Network error") from exc
+        except Exception as exc:
+            last_error = exc
+            logger.exception(f"Unexpected error in _generate_text_with_retry (attempt {attempt + 1}/{attempt_limit})")
+            if attempt < attempt_limit - 1:
+                jitter = random.uniform(0.0, delay * jitter_ratio)
+                await asyncio.sleep(delay + jitter)
+                delay = min(delay * 2.0, max_delay)
+                client = None
+                continue
+            raise HTTPException(status_code=500, detail="Processing error") from exc
 
         last_text = _resp_text(resp)
         if last_text:
             return last_text
+    logger.error(f"Failed to get text after {attempt_limit} attempts. Last error: {last_error}")
     return last_text
 
 

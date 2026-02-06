@@ -140,6 +140,7 @@ class GrowMindDB:
     # --- Collection Methods ---
 
     def get_collection(self, category: str) -> Dict[str, Any]:
+        """Retrieve an entire collection by category."""
         category = _validate_identifier(category, "category")
         with self._get_connection() as conn:
             cursor = conn.execute(
@@ -147,7 +148,8 @@ class GrowMindDB:
             )
             return {row["key"]: json.loads(row["value"]) for row in cursor.fetchall()}
 
-    def set_collection(self, category: str, data: Dict[str, Any]):
+    def set_collection(self, category: str, data: Dict[str, Any]) -> None:
+        """Replace entire collection with new data."""
         category = _validate_identifier(category, "category")
         cleaned: Dict[str, Any] = {}
         for key, value in (data or {}).items():
@@ -177,6 +179,7 @@ class GrowMindDB:
             conn.commit()
 
     def get_collection_key(self, category: str, key: str, default: Any = None) -> Any:
+        """Retrieve a specific key from a collection with type safety."""
         category = _validate_identifier(category, "category")
         key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
@@ -187,7 +190,8 @@ class GrowMindDB:
             row = cursor.fetchone()
             return json.loads(row["value"]) if row else default
 
-    def set_collection_key(self, category: str, key: str, value: Any):
+    def set_collection_key(self, category: str, key: str, value: Any) -> None:
+        """Store a key-value pair with automatic JSON serialization."""
         category = _validate_identifier(category, "category")
         key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
@@ -203,7 +207,8 @@ class GrowMindDB:
             )
             conn.commit()
 
-    def delete_collection_key(self, category: str, key: str):
+    def delete_collection_key(self, category: str, key: str) -> None:
+        """Delete a specific key from a collection."""
         category = _validate_identifier(category, "category")
         key = _validate_identifier(key, "key")
         with self._get_connection() as conn:
@@ -216,6 +221,7 @@ class GrowMindDB:
     # --- Inventory Methods ---
 
     def fetch_inventory(self) -> Dict[str, Dict[str, float]]:
+        """Retrieve all inventory items with their quantities."""
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT component, grams, initial_grams FROM inventory")
             return {
@@ -225,7 +231,8 @@ class GrowMindDB:
                 } for row in cursor.fetchall()
             }
 
-    def update_inventory(self, component: str, grams: float, initial_grams: Optional[float] = None):
+    def update_inventory(self, component: str, grams: float, initial_grams: Optional[float] = None) -> None:
+        """Update or create an inventory item."""
         with self._get_connection() as conn:
             if initial_grams is not None:
                 conn.execute(
@@ -268,13 +275,15 @@ class GrowMindDB:
     # --- Settings Methods ---
 
     def get_setting(self, key: str, default: Any = None) -> Any:
+        """Retrieve a setting by key with optional default."""
         key = _validate_identifier(key, "setting key")
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
             row = cursor.fetchone()
             return json.loads(row["value"]) if row else default
 
-    def set_setting(self, key: str, value: Any):
+    def set_setting(self, key: str, value: Any) -> None:
+        """Store or update a setting."""
         key = _validate_identifier(key, "setting key")
         with self._get_connection() as conn:
             conn.execute(

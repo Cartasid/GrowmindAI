@@ -473,9 +473,27 @@ def read_active_plan(cultivar: CultivarLiteral = Query(...), substrate: Substrat
 
 @router.post("/active")
 def set_active_plan(payload: ActivePlanPayload):
+    """Set the active nutrient plan for a cultivar-substrate combo with validation."""
     available_ids = {plan["id"] for plan in _get_available_plans(payload.cultivar, payload.substrate)}
     if payload.planId not in available_ids:
         raise HTTPException(status_code=404, detail=f"Plan '{payload.planId}' not found for combo")
+    
+    # Get and validate the selected plan
+    selected_plan = None
+    for plan in _get_available_plans(payload.cultivar, payload.substrate):
+        if plan["id"] == payload.planId:
+            selected_plan = plan
+            break
+    
+    if selected_plan:
+        plan_entries = selected_plan.get("plan", [])
+        # Validate plan structure is correct
+        if not isinstance(plan_entries, list):
+            raise HTTPException(status_code=400, detail="Invalid plan structure")
+        for entry in plan_entries:
+            if not isinstance(entry, dict):
+                raise HTTPException(status_code=400, detail="Invalid plan entry structure")
+    
     _set_active_plan_id(payload.cultivar, payload.substrate, payload.planId)
     return {"planId": payload.planId}
 

@@ -30,11 +30,24 @@ def update_settings(payload: TelemetrySettingsPayload) -> dict:
 
 @router.post("/send")
 async def trigger_send(payload: TelemetryTriggerPayload | None = None) -> dict:
+    """Trigger telemetry data send with comprehensive error handling."""
     force = payload.force if payload else False
     try:
         sent = await send_daily_payload(force=force)
     except HTTPException:
         raise
-    except Exception as exc:  # pylint: disable=broad-except
-        raise HTTPException(status_code=500, detail=f"Telemetry send failed: {exc}") from exc
+    except ValueError as exc:
+        # Validation errors from payload
+        raise HTTPException(status_code=400, detail=f"Invalid request: {exc}") from exc
+    except TimeoutError as exc:
+        # Network timeout
+        raise HTTPException(status_code=504, detail="Telemetry send timeout") from exc
+    except (OSError, IOError) as exc:
+        # Network errors
+        raise HTTPException(status_code=502, detail="Network error") from exc
+    except Exception as exc:
+        # Unexpected errors
+        import traceback
+        logger.exception("Unexpected error during telemetry send")
+        raise HTTPException(status_code=500, detail="Telemetry send failed") from exc
     return {"sent": sent}
