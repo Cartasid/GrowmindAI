@@ -344,6 +344,117 @@
       }
     ]
   },
+  "substrate_sensors": {
+    "label": "Substrate Sensors",
+    "targets": [
+      {
+        "role": "substrate_wc",
+        "label": "Substrate WC",
+        "entity_id": "sensor.substrate_wc",
+        "unit": "%",
+        "optional": true
+      },
+      {
+        "role": "substrate_ec",
+        "label": "Substrate EC",
+        "entity_id": "sensor.substrate_ec",
+        "unit": "mS/cm",
+        "optional": true
+      },
+      {
+        "role": "substrate_temp",
+        "label": "Substrate Temp",
+        "entity_id": "sensor.substrate_temp",
+        "unit": "°C",
+        "optional": true
+      }
+    ]
+  },
+  "irrigation_sensors": {
+    "label": "Irrigation Sensors",
+    "targets": [
+      {
+        "role": "drip_ec",
+        "label": "Drip EC",
+        "entity_id": "sensor.drip_ec",
+        "unit": "mS/cm",
+        "optional": true
+      },
+      {
+        "role": "drain_ec",
+        "label": "Drain EC",
+        "entity_id": "sensor.drain_ec",
+        "unit": "mS/cm",
+        "optional": true
+      },
+      {
+        "role": "tank_ec",
+        "label": "Tank EC",
+        "entity_id": "sensor.tank_ec",
+        "unit": "mS/cm",
+        "optional": true
+      },
+      {
+        "role": "tank_temp",
+        "label": "Tank Temp",
+        "entity_id": "sensor.tank_temp",
+        "unit": "°C",
+        "optional": true
+      }
+    ]
+  },
+  "climate_station": {
+    "label": "Climate Station",
+    "targets": [
+      {
+        "role": "dli",
+        "label": "DLI",
+        "entity_id": "sensor.grow_dli",
+        "unit": "mol/m2",
+        "optional": true
+      },
+      {
+        "role": "ppfd",
+        "label": "PPFD",
+        "entity_id": "sensor.grow_ppfd",
+        "unit": "umol",
+        "optional": true
+      }
+    ]
+  },
+  "dry_room": {
+    "label": "Dry Room",
+    "targets": [
+      {
+        "role": "dry_temp",
+        "label": "Dry Temp",
+        "entity_id": "sensor.dry_room_temp",
+        "unit": "°C",
+        "optional": true
+      },
+      {
+        "role": "dry_humidity",
+        "label": "Dry Humidity",
+        "entity_id": "sensor.dry_room_humidity",
+        "unit": "%",
+        "optional": true
+      },
+      {
+        "role": "dry_vpd",
+        "label": "Dry VPD",
+        "entity_id": "sensor.dry_room_vpd",
+        "unit": "kPa",
+        "optional": true
+      },
+      {
+        "role": "water_activity",
+        "label": "Water Activity",
+        "entity_id": "sensor.dry_room_water_activity",
+        "unit": "aw",
+        "optional": true
+      }
+    ]
+  },
   "lighting_spectrum": {
     "label": "Lighting Spectrum",
     "inputs": [

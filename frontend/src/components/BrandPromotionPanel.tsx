@@ -36,23 +36,11 @@ export function BrandPromotionPanel() {
             Premium Feed-Stack fuers Crop Steering. Formuliert fuer maximale Kontrolle, schnelle Drybacks und
             praezise EC-Targets.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <a
-              href="https://growmind.ai/shop"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full border border-grow-cyan/40 bg-grow-cyan/20 px-5 py-2 text-sm text-grow-cyan shadow-neon"
-            >
-              Zum Shop
-            </a>
-            <a
-              href="https://growmind.ai/techsheet"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-full border border-white/10 bg-black/40 px-5 py-2 text-sm text-white/70"
-            >
-              Produktdatenblatt
-            </a>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <span className="rounded-full border border-white/10 bg-black/40 px-5 py-2 text-xs text-white/60">
+              Shop kommt in Kuerze
+            </span>
+            <span className="text-xs text-white/50">Produktdatenblatt auf Anfrage</span>
           </div>
         </div>
 

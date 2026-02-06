@@ -23,6 +23,12 @@ import { TimeSeriesPanel } from "./components/TimeSeriesPanel";
 import { GrafanaEmbedPanel } from "./components/GrafanaEmbedPanel";
 import { ControlCenterPanel } from "./components/ControlCenterPanel";
 import { BrandPromotionPanel } from "./components/BrandPromotionPanel";
+import { BlueprintLibraryPanel } from "./components/BlueprintLibraryPanel";
+import { RulesEnginePanel } from "./components/RulesEnginePanel";
+import { TaskBoardPanel } from "./components/TaskBoardPanel";
+import { BatchTrackerPanel } from "./components/BatchTrackerPanel";
+import { PredictiveInsightsPanel } from "./components/PredictiveInsightsPanel";
+import { AlertsPanel } from "./components/AlertsPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
@@ -37,7 +43,7 @@ type Metric = {
   icon: LucideIcon;
 };
 
-type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering" | "automations";
+type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering" | "automations" | "intelligence";
 
 const substrateMetrics: Metric[] = [
   {
@@ -67,7 +73,8 @@ const sidebarLinks: { key: SectionKey; label: string }[] = [
   { key: "nutrients", label: "Nährstoffrechner" },
   { key: "steering", label: "Crop Steering" },
   { key: "mapping", label: "Sensor-Mapping" },
-  { key: "automations", label: "Automationen" }
+  { key: "automations", label: "Automationen" },
+  { key: "intelligence", label: "Intelligence" }
 ];
 
 const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle: string }> = {
@@ -100,6 +107,11 @@ const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle
     eyebrow: "Control",
     title: "Automationen",
     subtitle: "Home Assistant Regeln verwalten"
+  },
+  intelligence: {
+    eyebrow: "Analyze",
+    title: "Grow Intelligence",
+    subtitle: "Reports, Predict, Blueprints und Tasks"
   }
 };
 
@@ -646,6 +658,18 @@ function App() {
                 {activeSection === "automations" && (
                   <motion.div variants={fadeUp}>
                     <AutomationsPanel />
+                  </motion.div>
+                )}
+                {activeSection === "intelligence" && (
+                  <motion.div variants={fadeUp}>
+                    <div className="space-y-10">
+                      <PredictiveInsightsPanel growId={activeGrowId} />
+                      <AlertsPanel />
+                      <RulesEnginePanel />
+                      <BlueprintLibraryPanel />
+                      <TaskBoardPanel />
+                      <BatchTrackerPanel />
+                    </div>
                   </motion.div>
                 )}
               </motion.div>

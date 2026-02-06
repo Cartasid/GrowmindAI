@@ -29,6 +29,7 @@ from .telemetry_routes import router as telemetry_router
 from .nutrient_routes import router as nutrient_router
 from .websocket_routes import router as websocket_router
 from .timeseries_routes import router as timeseries_router
+from .operations_routes import router as operations_router
 from .telemetry import telemetry_worker, shutdown_worker
 from .utils import load_mapping
 from .sanitization import InputSanitizer
@@ -213,6 +214,7 @@ app.include_router(telemetry_router)
 app.include_router(nutrient_router)
 app.include_router(websocket_router)
 app.include_router(timeseries_router)
+app.include_router(operations_router)
 
 
 class UpdatePayload(BaseModel):
