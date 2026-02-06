@@ -29,6 +29,8 @@ import { TaskBoardPanel } from "./components/TaskBoardPanel";
 import { BatchTrackerPanel } from "./components/BatchTrackerPanel";
 import { PredictiveInsightsPanel } from "./components/PredictiveInsightsPanel";
 import { AlertsPanel } from "./components/AlertsPanel";
+import { CropSteeringCopilotPanel } from "./components/CropSteeringCopilotPanel";
+import { PostHarvestPanel } from "./components/PostHarvestPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
@@ -646,6 +648,7 @@ function App() {
                   <motion.div variants={fadeUp}>
                     <div className="space-y-10">
                       <CropSteeringPanel />
+                      <CropSteeringCopilotPanel />
                       <ControlCenterPanel />
                     </div>
                   </motion.div>
@@ -669,6 +672,7 @@ function App() {
                       <BlueprintLibraryPanel />
                       <TaskBoardPanel />
                       <BatchTrackerPanel />
+                      <PostHarvestPanel />
                     </div>
                   </motion.div>
                 )}

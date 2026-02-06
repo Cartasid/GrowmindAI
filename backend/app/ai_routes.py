@@ -107,6 +107,43 @@ class PlanOptimizationPayload(BaseModel):
     weeks: List[PlanWeekTarget]
 
 
+class SteeringCopilotPayload(BaseModel):
+    lang: Optional[str] = "en"
+    phase: Optional[str] = None
+    objectives: Optional[List[str]] = None
+    targets: Optional[Dict[str, Any]] = None
+    current: Optional[Dict[str, Any]] = None
+    constraints: Optional[List[str]] = None
+
+
+def _build_steering_copilot_prompt(payload: SteeringCopilotPayload) -> Tuple[List[types.Part], str]:
+    lang = (payload.lang or "en").lower()
+    is_german = lang.startswith("de")
+    intro = (
+        "Du bist ein Crop-Steering-Copilot und erstellst klare, human-readable Regeln."
+        if is_german
+        else "You are a crop steering copilot generating clear, human-readable rules."
+    )
+    meta = {
+        "phase": payload.phase,
+        "objectives": payload.objectives or [],
+        "targets": payload.targets or {},
+        "current": payload.current or {},
+        "constraints": payload.constraints or [],
+    }
+    prompt = (
+        f"{intro}\n"
+        "Return JSON with keys: rules(array[ {name,when,then,priority} ]), alerts(array[ {name,metric,operator,threshold,severity} ]), summary(string).\n"
+        "Rules must be human-readable and reference metrics by name. Keep each rule short and actionable.\n"
+        "Return JSON only.\n"
+        f"INPUT:{json.dumps(meta, ensure_ascii=False)}"
+    )
+    language_label = "German" if is_german else "English"
+    example = '{"rules":[{"name":"VPD High","when":"VPD > 1.6","then":"Increase irrigation by 10%","priority":"high"}],"alerts":[{"name":"Dry Room RH","metric":"dry_humidity","operator":">","threshold":65,"severity":"warning"}],"summary":"..."}'
+    extra = _strict_json_instruction(example, language_label)
+    return [types.Part.from_text(text=prompt)], extra
+
+
 def _read_addon_options() -> Dict[str, Any]:
     try:
         with open("/data/options.json", "r", encoding="utf-8") as handle:
@@ -655,6 +692,28 @@ async def optimize_plan(payload: PlanOptimizationPayload):
     except Exception as exc:
         logger.exception("Gemini optimize-plan failed")
         return JSONResponse({"error": "Failed to optimize plan."}, status_code=500)
+
+
+@router.post("/steering-copilot")
+async def steering_copilot(payload: SteeringCopilotPayload):
+    _ = _api_key()
+    user_parts, extra = _build_steering_copilot_prompt(payload)
+    try:
+        parsed, raw = await _generate_json_with_retry(user_parts, extra_instruction=extra, max_tokens=1536, temperature=0.3)
+        if isinstance(parsed, dict) and isinstance(parsed.get("rules"), list):
+            return parsed
+        fallback = _strip_code_fences(raw)
+        if not fallback:
+            return JSONResponse({"error": "No model output."}, status_code=502)
+        return {"rules": [], "alerts": [], "summary": fallback}
+    except errors.APIError as exc:
+        logger.warning("Gemini steering-copilot failed (%s)", exc.code)
+        return JSONResponse({"error": "Gemini API error."}, status_code=502)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Gemini steering-copilot failed")
+        return JSONResponse({"error": "Failed to generate copilot output."}, status_code=500)
 
 
 @router.post("/analyze-text")

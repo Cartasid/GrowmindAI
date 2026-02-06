@@ -221,6 +221,41 @@ export const analyzePlantImage = async (
   }
 };
 
+export type SteeringCopilotResponse = {
+  rules: Array<{ name: string; when: string; then: string; priority?: string }>;
+  alerts: Array<{ name: string; metric: string; operator: string; threshold: number; severity?: string }>;
+  summary?: string;
+};
+
+export const generateSteeringCopilot = async (payload: {
+  lang: Language;
+  phase?: string;
+  objectives?: string[];
+  targets?: Record<string, unknown>;
+  current?: Record<string, unknown>;
+  constraints?: string[];
+}): Promise<ServiceResult<SteeringCopilotResponse>> => {
+  try {
+    const response = await fetch(apiUrl("/api/gemini/steering-copilot"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      return { ok: false, error: createError("PROXY_ERROR", text || "Server error", undefined, response.status) };
+    }
+    const data = (await response.json()) as SteeringCopilotResponse;
+    if (!Array.isArray(data.rules)) {
+      return { ok: false, error: createError("INVALID_RESPONSE", "Unexpected copilot output") };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: createError("NETWORK_ERROR", "Copilot request failed", details) };
+  }
+};
+
 export const analyzeGrowthStage = async (
   phase: Phase,
   daysSinceStart: number,
