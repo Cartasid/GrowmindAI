@@ -167,20 +167,7 @@ export function RulesEnginePanel() {
             <input
               value={draft.name}
               onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-              <div className="flex items-center justify-between text-xs text-white/60">
-                <span>Preview: Dry-run mit aktuellen Werten</span>
-                <button
-                  className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] text-white/70"
-                  onClick={() => setPreviewTick((prev) => prev + 1)}
-                >
-                  Preview aktualisieren
-                </button>
-              </div>
               placeholder="Name"
-                const previewState = preview.find((entry) => entry.id === item.id || (!item.id && index === index));
-                const status = previewState?.status ?? "unknown";
-                const statusLabel =
-                  status === "match" ? "MATCH" : status === "no-match" ? "NO MATCH" : "UNKNOWN";
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
             <input
@@ -189,17 +176,6 @@ export function RulesEnginePanel() {
               placeholder="WENN z.B. VPD > 1.6 oder RH < 52"
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
-                        <span
-                          className={`rounded-full border px-3 py-1 text-[10px] ${
-                            status === "match"
-                              ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
-                              : status === "no-match"
-                              ? "border-white/10 bg-black/40 text-white/70"
-                              : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
             <input
               value={draft.then}
               onChange={(event) => setDraft((prev) => ({ ...prev, then: event.target.value }))}
@@ -233,34 +209,60 @@ export function RulesEnginePanel() {
         </div>
 
         <div className="space-y-3">
-          {items.map((item) => (
-            <div key={item.id} className="glass-card rounded-2xl px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-white">{item.name}</p>
-                  <p className="text-xs text-white/50">{item.when} → {item.then}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className={`rounded-full border px-3 py-1 text-xs ${
-                      item.enabled
-                        ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
-                        : "border-white/10 bg-black/40 text-white/70"
-                    }`}
-                    onClick={() => toggleRule(item)}
-                  >
-                    {item.enabled ? "Aktiv" : "Inaktiv"}
-                  </button>
-                  <button
-                    className="rounded-full border border-brand-red/40 bg-brand-red/10 px-3 py-1 text-xs text-brand-red"
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    Loeschen
-                  </button>
+          <div className="flex items-center justify-between text-xs text-white/60">
+            <span>Preview: Dry-run mit aktuellen Werten</span>
+            <button
+              className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] text-white/70"
+              onClick={() => setPreviewTick((prev) => prev + 1)}
+            >
+              Preview aktualisieren
+            </button>
+          </div>
+          {items.map((item, index) => {
+            const previewState = preview[index];
+            const status = previewState?.status ?? "unknown";
+            const statusLabel =
+              status === "match" ? "MATCH" : status === "no-match" ? "NO MATCH" : "UNKNOWN";
+            return (
+              <div key={item.id} className="glass-card rounded-2xl px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-white">{item.name}</p>
+                    <p className="text-xs text-white/50">{item.when} → {item.then}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full border px-3 py-1 text-[10px] ${
+                        status === "match"
+                          ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+                          : status === "no-match"
+                          ? "border-white/10 bg-black/40 text-white/70"
+                          : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
+                      }`}
+                    >
+                      {statusLabel}
+                    </span>
+                    <button
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        item.enabled
+                          ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+                          : "border-white/10 bg-black/40 text-white/70"
+                      }`}
+                      onClick={() => toggleRule(item)}
+                    >
+                      {item.enabled ? "Aktiv" : "Inaktiv"}
+                    </button>
+                    <button
+                      className="rounded-full border border-brand-red/40 bg-brand-red/10 px-3 py-1 text-xs text-brand-red"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      Loeschen
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {items.length === 0 && <p className="text-sm text-white/60">Keine Rules angelegt.</p>}
         </div>
       </div>
