@@ -19,6 +19,7 @@ from .ai_routes import router as ai_router
 from .telemetry_routes import router as telemetry_router
 from .nutrient_routes import router as nutrient_router
 from .telemetry import telemetry_worker, shutdown_worker
+from .utils import load_mapping
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 logging.getLogger().setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
@@ -66,15 +67,7 @@ class UpdatePayload(BaseModel):
     value: Any
 
 
-def _load_mapping() -> Dict[str, Any]:
-    mapping_path = Path(__file__).resolve().parents[2] / "mapping.json"
-    if not mapping_path.exists():
-        raise RuntimeError("mapping.json not found at project root")
-    with mapping_path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
-
-
-MAPPING = _load_mapping()
+MAPPING = load_mapping()
 HASS_API_BASE = os.getenv("HASS_API_BASE", "http://supervisor/core/api")
 
 _UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
@@ -193,11 +186,22 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
                 if state_val in _UNAVAILABLE_STATES:
                     issues.append(f"{entity_id}: {state_val}")
 
-    alarm_entities = [
-        "binary_sensor.grow_leak_detected",
-        "binary_sensor.grow_pump_dry",
-        "binary_sensor.grow_sensor_fault",
-    ]
+    alarm_entities: List[str] = []
+    system_alerts = MAPPING.get("system_alerts", {})
+    if isinstance(system_alerts, dict):
+        for target in system_alerts.get("targets", []):
+            eid = target.get("entity_id")
+            if eid:
+                alarm_entities.append(eid)
+
+    # Fallback to defaults if mapping is missing or empty
+    if not alarm_entities:
+        alarm_entities = [
+            "binary_sensor.grow_leak_detected",
+            "binary_sensor.grow_pump_dry",
+            "binary_sensor.grow_sensor_fault",
+        ]
+
     alarms_active: List[str] = []
     for eid in alarm_entities:
         state_obj = state_map.get(eid)

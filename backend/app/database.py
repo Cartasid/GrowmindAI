@@ -107,12 +107,27 @@ class GrowMindDB:
 
     def set_collection(self, category: str, data: Dict[str, Any]):
         with self._get_connection() as conn:
-            conn.execute("DELETE FROM collections WHERE category = ?", (category,))
-            for key, val in data.items():
+            if not data:
+                conn.execute("DELETE FROM collections WHERE category = ?", (category,))
+            else:
+                # Delete keys that are no longer present
+                placeholders = ", ".join("?" for _ in data)
                 conn.execute(
-                    "INSERT INTO collections (category, key, value) VALUES (?, ?, ?)",
-                    (category, key, json.dumps(val))
+                    f"DELETE FROM collections WHERE category = ? AND key NOT IN ({placeholders})",
+                    (category, *data.keys())
                 )
+                # Upsert new/updated values
+                for key, val in data.items():
+                    conn.execute(
+                        """
+                        INSERT INTO collections (category, key, value, updated_at)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(category, key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (category, key, json.dumps(val))
+                    )
             conn.commit()
 
     def get_collection_key(self, category: str, key: str, default: Any = None) -> Any:
@@ -173,18 +188,6 @@ class GrowMindDB:
                     (component, grams, initial_grams)
                 )
             else:
-                # If record doesn't exist, we should insert it instead of doing nothing
-                conn.execute(
-                    """
-                    INSERT INTO inventory (component, grams, initial_grams, updated_at)
-                    VALUES (?, ?, 0.0, CURRENT_TIMESTAMP)
-                    ON CONFLICT(component) DO UPDATE SET
-                    grams = excluded.grams,
-                    updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (grams, component, grams) # Wait, arguments order is wrong for INSERT
-                )
-                # Correcting:
                 conn.execute(
                     """
                     INSERT INTO inventory (component, grams, initial_grams, updated_at)

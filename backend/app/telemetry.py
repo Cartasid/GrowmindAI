@@ -182,13 +182,33 @@ async def send_daily_payload(force: bool = False) -> bool:
 
 
 async def telemetry_worker(stop_event: Optional[asyncio.Event] = None) -> None:
-    delay = max(1, INTERVAL_HOURS * 3600)
     stopper = stop_event or asyncio.Event()
     while not stopper.is_set():
         try:
             await send_daily_payload()
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.exception("telemetry: unexpected error: %s", exc)
+        except Exception as exc:
+            logger.exception("telemetry: unexpected error in worker: %s", exc)
+
+        # Calculate dynamic delay
+        settings = get_settings()
+        if not settings.get("enabled"):
+            delay = 3600  # Check once per hour if user opted in
+        else:
+            last_sent = _parse_iso(settings.get("lastSent"))
+            if last_sent:
+                elapsed = (_now() - last_sent).total_seconds()
+                remaining = (INTERVAL_HOURS * 3600) - elapsed
+                if remaining > 0:
+                    delay = remaining
+                else:
+                    # Should have sent but failed (error or no data)
+                    delay = 600  # Retry in 10 minutes
+            else:
+                delay = 60  # Try soon if never sent
+
+        # Clamp delay to sane bounds
+        delay = max(10, min(delay, INTERVAL_HOURS * 3600))
+
         try:
             await asyncio.wait_for(stopper.wait(), timeout=delay)
         except asyncio.TimeoutError:

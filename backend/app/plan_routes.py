@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .storage import get_collection, set_collection
+from .storage import get_collection_key, set_collection_key
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
 
@@ -275,23 +275,17 @@ def _ensure_list(value: Any) -> List[Dict[str, Any]]:
 
 
 def _load_store_payload() -> Dict[str, Any]:
-    raw = get_collection(PLANS_COLLECTION)
     return {
-        CUSTOM_PLANS_KEY: _ensure_dict(raw.get(CUSTOM_PLANS_KEY)),
-        ACTIVE_PLAN_KEY: _ensure_dict(raw.get(ACTIVE_PLAN_KEY)),
-        DEFAULT_OVERRIDE_KEY: _ensure_dict(raw.get(DEFAULT_OVERRIDE_KEY)),
+        CUSTOM_PLANS_KEY: _ensure_dict(get_collection_key(PLANS_COLLECTION, CUSTOM_PLANS_KEY, {})),
+        ACTIVE_PLAN_KEY: _ensure_dict(get_collection_key(PLANS_COLLECTION, ACTIVE_PLAN_KEY, {})),
+        DEFAULT_OVERRIDE_KEY: _ensure_dict(get_collection_key(PLANS_COLLECTION, DEFAULT_OVERRIDE_KEY, {})),
     }
 
 
 def _save_store_payload(payload: Dict[str, Any]) -> None:
-    set_collection(
-        PLANS_COLLECTION,
-        {
-            CUSTOM_PLANS_KEY: payload.get(CUSTOM_PLANS_KEY, {}),
-            ACTIVE_PLAN_KEY: payload.get(ACTIVE_PLAN_KEY, {}),
-            DEFAULT_OVERRIDE_KEY: payload.get(DEFAULT_OVERRIDE_KEY, {}),
-        },
-    )
+    set_collection_key(PLANS_COLLECTION, CUSTOM_PLANS_KEY, payload.get(CUSTOM_PLANS_KEY, {}))
+    set_collection_key(PLANS_COLLECTION, ACTIVE_PLAN_KEY, payload.get(ACTIVE_PLAN_KEY, {}))
+    set_collection_key(PLANS_COLLECTION, DEFAULT_OVERRIDE_KEY, payload.get(DEFAULT_OVERRIDE_KEY, {}))
 
 
 def _sanitize_notes(notes: Optional[List[str]]) -> Optional[List[str]]:

@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 from app.database import db
 from app.plan_routes import BASE_PLAN_TEMPLATES
+from app.utils import load_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +102,7 @@ class NutrientCalculator:
         return entries
 
     def _load_inventory_config(self) -> Dict[str, Dict[str, Any]]:
-        mapping_path = Path(__file__).resolve().parent / "mapping.json"
-        if not mapping_path.exists():
-             mapping_path = Path(__file__).resolve().parents[1] / "mapping.json"
-
-        with mapping_path.open("r", encoding="utf-8") as handle:
-            mapping = json.load(handle)
-
+        mapping = load_mapping()
         inventory = mapping.get("inventory") or {}
         items = {}
         for group in ("nutrients", "additives"):
@@ -231,9 +226,10 @@ class NutrientCalculator:
                 new_level = max(0.0, current[key]["grams"] - used)
                 db.update_inventory(key, new_level)
             else:
-                # Key didn't exist in current, but seeding should prevent this.
-                # If it happens, we treat full_size as 0 or default and just set it to 0 if consumed.
-                db.update_inventory(key, 0.0, 0.0)
+                # Key didn't exist in current, treat full_size as default if available
+                meta = self._inventory_config.get(key, {})
+                full = float(meta.get("full_size") or 0.0)
+                db.update_inventory(key, 0.0, full)
 
     def get_stock_status(self) -> Dict[str, Dict[str, Any]]:
         levels = db.fetch_inventory()
