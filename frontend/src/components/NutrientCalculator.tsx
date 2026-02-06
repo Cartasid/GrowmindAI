@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import type { Cultivar, ManagedPlan, Substrate } from "../types";
+import type { Cultivar, ManagedPlan, PlanEntry, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
@@ -9,7 +9,8 @@ import {
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
-import { fetchActivePlan, fetchAvailablePlans, setActivePlan } from "../services/planService";
+import { optimizePlan } from "../services/aiService";
+import { createPlan, fetchActivePlan, fetchAvailablePlans, setActivePlan } from "../services/planService";
 
 const CULTIVARS: { value: Cultivar; label: string }[] = [
   { value: "wedding_cake", label: "Wedding Cake" },
@@ -37,6 +38,7 @@ const MIX_ORDER = ["part_a", "part_b", "part_c", "burst", "kelp", "amino", "fulv
 type ValueEvent = { target: { value: string } };
 type TopDressItem = NonNullable<MixResponse["top_dress"]>[number];
 type InventoryAlertItem = InventoryResponse["alerts"][number];
+type EditablePlan = Omit<ManagedPlan, "id"> & { id?: string };
 
 const staggerContainer = {
   hidden: { opacity: 1 },
@@ -60,6 +62,12 @@ export function NutrientCalculator() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorPlan, setEditorPlan] = useState<EditablePlan | null>(null);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [activateAfterSave, setActivateAfterSave] = useState(true);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -109,6 +117,62 @@ export function NutrientCalculator() {
     if (!plans.length) return null;
     return plans.find((plan: ManagedPlan) => plan.id === selectedPlanId) ?? plans[0];
   }, [plans, selectedPlanId]);
+
+  const cloneEntries = (planEntries: PlanEntry[]) =>
+    planEntries.map((entry) => ({
+      ...entry,
+      notes: entry.notes ? [...entry.notes] : undefined,
+    }));
+
+  const buildDraftFromPlan = (plan: ManagedPlan, overrides?: Partial<EditablePlan>): EditablePlan => ({
+    id: undefined,
+    name: plan.name,
+    description: plan.description ?? "",
+    plan: cloneEntries(plan.plan),
+    waterProfile: { ...plan.waterProfile },
+    osmosisShare: plan.osmosisShare,
+    isDefault: false,
+    ...overrides,
+  });
+
+  const mergeAiSuggestions = (
+    base: PlanEntry[],
+    suggestions: {
+      phase: string;
+      A: number;
+      X: number;
+      BZ: number;
+      pH: string;
+      EC: string;
+      notes?: string;
+      stage?: string;
+    }[]
+  ) =>
+    suggestions.map((suggestion) => {
+      const match = base.find((entry) => entry.phase === suggestion.phase);
+      const notes = match?.notes ? [...match.notes] : [];
+      if (suggestion.stage) {
+        notes.unshift(suggestion.stage);
+      }
+      if (suggestion.notes) {
+        notes.push(suggestion.notes);
+      }
+      return {
+        phase: suggestion.phase,
+        A: Number.isFinite(suggestion.A) ? suggestion.A : 0,
+        X: Number.isFinite(suggestion.X) ? suggestion.X : 0,
+        BZ: Number.isFinite(suggestion.BZ) ? suggestion.BZ : 0,
+        pH: suggestion.pH ?? "",
+        EC: suggestion.EC ?? "",
+        durationDays: match?.durationDays ?? 7,
+        Tide: match?.Tide,
+        Helix: match?.Helix,
+        Ligand: match?.Ligand,
+        Silicate: match?.Silicate,
+        SilicateUnit: match?.SilicateUnit,
+        notes: notes.length ? notes : undefined,
+      };
+    });
 
   const phaseOptions = useMemo(() => {
     if (!selectedPlan?.plan) return [DEFAULT_INPUTS.phase];
@@ -165,6 +229,114 @@ export function NutrientCalculator() {
         variant: "error",
       });
     }
+  };
+
+  const handleCreateDraft = () => {
+    if (!selectedPlan) return;
+    const draft = buildDraftFromPlan(selectedPlan, {
+      name: "Neuer Plan",
+      description: `Kopie von ${selectedPlan.name}`,
+    });
+    setEditorPlan(draft);
+    setAiSummary(null);
+    setShowEditor(true);
+  };
+
+  const handleGenerateAiPlan = async () => {
+    if (!selectedPlan) return;
+    setAiGenerating(true);
+    setAiSummary(null);
+    try {
+      const waterProfile = { ...selectedPlan.waterProfile } as Record<string, number>;
+      const response = await optimizePlan(
+        selectedPlan.plan,
+        "de",
+        cultivar,
+        substrate,
+        waterProfile,
+        selectedPlan.osmosisShare
+      );
+      if (!response.ok) {
+        throw new Error(response.error.message);
+      }
+      const aiPlanEntries = mergeAiSuggestions(selectedPlan.plan, response.data.plan);
+      const draft = buildDraftFromPlan(selectedPlan, {
+        name: `AI Plan ${selectedPlan.name}`,
+        description: response.data.summary ?? "AI-generierter Plan basierend auf dem aktuellen Profil.",
+        plan: aiPlanEntries,
+      });
+      setEditorPlan(draft);
+      setAiSummary(response.data.summary ?? null);
+      setShowEditor(true);
+      addToast({ title: "AI-Plan bereit", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "AI-Plan fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handlePlanSave = async () => {
+    if (!editorPlan) return;
+    if (!editorPlan.name.trim()) {
+      addToast({ title: "Name fehlt", description: "Bitte einen Plannamen vergeben.", variant: "error" });
+      return;
+    }
+    setPlanSaving(true);
+    try {
+      const saved = await createPlan(cultivar, substrate, editorPlan);
+      const available = await fetchAvailablePlans(cultivar, substrate);
+      setPlans(available);
+      setSelectedPlanId(saved.id);
+      if (activateAfterSave) {
+        const activeId = await setActivePlan(cultivar, substrate, saved.id);
+        setActivePlanId(activeId);
+      }
+      setShowEditor(false);
+      addToast({ title: "Plan gespeichert", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Plan speichern fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
+  const updateDraftField = <K extends keyof EditablePlan>(key: K, value: EditablePlan[K]) => {
+    setEditorPlan((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updateEntryField = <K extends keyof PlanEntry>(index: number, key: K, value: PlanEntry[K]) => {
+    setEditorPlan((prev) => {
+      if (!prev) return prev;
+      const updated = prev.plan.map((entry, idx) => (idx === index ? { ...entry, [key]: value } : entry));
+      return { ...prev, plan: updated };
+    });
+  };
+
+  const handleAddEntry = () => {
+    setEditorPlan((prev) => {
+      if (!prev) return prev;
+      const nextIndex = prev.plan.length + 1;
+      const nextEntry: PlanEntry = {
+        phase: `W${nextIndex}`,
+        A: 0,
+        X: 0,
+        BZ: 0,
+        pH: "",
+        EC: "",
+        durationDays: 7,
+      };
+      return { ...prev, plan: [...prev.plan, nextEntry] };
+    });
+  };
+
+  const handleRemoveEntry = (index: number) => {
+    setEditorPlan((prev) => {
+      if (!prev) return prev;
+      return { ...prev, plan: prev.plan.filter((_, idx) => idx !== index) };
+    });
   };
 
   return (
@@ -263,6 +435,22 @@ export function NutrientCalculator() {
                       Aktiver Plan
                     </span>
                   )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={handleCreateDraft}
+                      disabled={!selectedPlan}
+                    >
+                      Neuen Plan anlegen
+                    </button>
+                    <button
+                      className="rounded-full border border-brand-purple/40 bg-brand-purple/15 px-4 py-2 text-xs text-brand-purple shadow-brand-glow hover:border-brand-purple/70"
+                      onClick={handleGenerateAiPlan}
+                      disabled={!selectedPlan || aiGenerating}
+                    >
+                      {aiGenerating ? "AI generiert…" : "AI-Plan generieren"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -425,6 +613,211 @@ export function NutrientCalculator() {
           )}
         </motion.div>
       </motion.div>
+
+      {showEditor && editorPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
+          <div className="glass-panel flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl p-6 text-white shadow-neon">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-white/50">Plan Editor</p>
+                <h3 className="mt-2 text-2xl font-light">Plan anlegen</h3>
+                <p className="text-sm text-white/60">Passe Plan-Details an und speichere als neuen Plan.</p>
+              </div>
+              <button
+                className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-white/40"
+                onClick={() => setShowEditor(false)}
+              >
+                Schließen
+              </button>
+            </div>
+
+            {aiSummary && (
+              <div className="mt-4 rounded-2xl border border-brand-purple/40 bg-brand-purple/10 px-4 py-3 text-xs text-brand-purple">
+                {aiSummary}
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="text-sm text-white/70">
+                Planname
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  value={editorPlan.name}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => updateDraftField("name", event.target.value)}
+                />
+              </label>
+              <label className="text-sm text-white/70">
+                Osmose-Anteil (0-1)
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={editorPlan.osmosisShare}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    updateDraftField("osmosisShare", Number(event.target.value) || 0)
+                  }
+                />
+              </label>
+              <label className="text-sm text-white/70 md:col-span-2">
+                Beschreibung
+                <textarea
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  rows={2}
+                  value={editorPlan.description}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => updateDraftField("description", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">Plan-Phasen</p>
+              <button
+                className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-2 text-xs text-brand-cyan"
+                onClick={handleAddEntry}
+              >
+                Phase hinzufügen
+              </button>
+            </div>
+
+            <div className="mt-3 flex-1 overflow-auto rounded-2xl border border-white/10">
+              <table className="min-w-full text-xs">
+                <thead className="bg-black/40 text-white/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Phase</th>
+                    <th className="px-3 py-2 text-right">A</th>
+                    <th className="px-3 py-2 text-right">X</th>
+                    <th className="px-3 py-2 text-right">BZ</th>
+                    <th className="px-3 py-2 text-right">pH</th>
+                    <th className="px-3 py-2 text-right">EC</th>
+                    <th className="px-3 py-2 text-right">Tage</th>
+                    <th className="px-3 py-2 text-right">Tide</th>
+                    <th className="px-3 py-2 text-right">Helix</th>
+                    <th className="px-3 py-2 text-right">Ligand</th>
+                    <th className="px-3 py-2 text-right">Silicate</th>
+                    <th className="px-3 py-2 text-right">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editorPlan.plan.map((entry, index) => (
+                    <tr key={`${entry.phase}-${index}`} className="border-t border-white/5">
+                      <td className="px-3 py-2">
+                        <input
+                          className="w-28 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-white"
+                          value={entry.phase}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateEntryField(index, "phase", event.target.value)
+                          }
+                        />
+                      </td>
+                      {([
+                        ["A", entry.A],
+                        ["X", entry.X],
+                        ["BZ", entry.BZ],
+                      ] as const).map(([key, value]) => (
+                        <td key={key} className="px-3 py-2 text-right">
+                          <input
+                            className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                            type="number"
+                            step={0.01}
+                            value={value}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              updateEntryField(index, key, Number(event.target.value) || 0)
+                            }
+                          />
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          className="w-20 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          value={entry.pH}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateEntryField(index, "pH", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          className="w-20 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          value={entry.EC}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateEntryField(index, "EC", event.target.value)
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={entry.durationDays ?? 7}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateEntryField(index, "durationDays", Number(event.target.value) || 1)
+                          }
+                        />
+                      </td>
+                      {([
+                        ["Tide", entry.Tide ?? ""],
+                        ["Helix", entry.Helix ?? ""],
+                        ["Ligand", entry.Ligand ?? ""],
+                        ["Silicate", entry.Silicate ?? ""],
+                      ] as const).map(([key, value]) => (
+                        <td key={key} className="px-3 py-2 text-right">
+                          <input
+                            className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                            type="number"
+                            step={0.01}
+                            value={value}
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              updateEntryField(index, key as keyof PlanEntry, Number(event.target.value) || 0)
+                            }
+                          />
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          className="rounded-full border border-brand-red/40 bg-brand-red/10 px-3 py-1 text-xs text-brand-red"
+                          onClick={() => handleRemoveEntry(index)}
+                        >
+                          Entfernen
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-xs text-white/70">
+                <input
+                  type="checkbox"
+                  checked={activateAfterSave}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setActivateAfterSave(event.target.checked)}
+                />
+                Nach dem Speichern aktivieren
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70"
+                  onClick={() => setShowEditor(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  className="rounded-full border border-brand-cyan/40 bg-brand-cyan/15 px-5 py-2 text-xs text-brand-cyan shadow-brand-glow"
+                  onClick={handlePlanSave}
+                  disabled={planSaving}
+                >
+                  {planSaving ? "Speichert…" : "Plan speichern"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.section>
   );
 }

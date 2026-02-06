@@ -44,3 +44,42 @@ export const setActivePlan = async (
   });
   return response.planId;
 };
+
+type PlanDraft = Omit<ManagedPlan, "id"> & { id?: string };
+
+export const createPlan = async (
+  cultivar: Cultivar,
+  substrate: Substrate,
+  plan: PlanDraft
+): Promise<ManagedPlan> => {
+  const payload = { cultivar, substrate, plan };
+  return requestJson<ManagedPlan>("/api/plans/custom", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const updatePlan = async (
+  cultivar: Cultivar,
+  substrate: Substrate,
+  plan: ManagedPlan
+): Promise<ManagedPlan> => {
+  const payload = { cultivar, substrate, plan };
+  return requestJson<ManagedPlan>("/api/plans/custom", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deletePlan = async (
+  cultivar: Cultivar,
+  substrate: Substrate,
+  planId: string
+): Promise<void> => {
+  const query = `cultivar=${encodeURIComponent(cultivar)}&substrate=${encodeURIComponent(substrate)}`;
+  await requestJson<{ deleted: boolean }>(`/api/plans/custom/${encodeURIComponent(planId)}?${query}`,
+    { method: "DELETE" }
+  );
+};
