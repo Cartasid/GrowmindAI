@@ -1,4 +1,5 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
+ARG CACHEBUST=1
 
 # ---------- Stage 1: Frontend builder ----------
 FROM node:20-alpine AS frontend-builder
@@ -16,6 +17,9 @@ RUN test -d dist && echo "Frontend build successful" || exit 1
 
 # ---------- Stage 2: Runtime image ----------
 FROM ${BUILD_FROM} AS runtime
+
+# small no-op that includes build arg to force cache invalidation when changed
+RUN echo "CACHEBUST=${CACHEBUST}"
 
 # Install Python and essential tools
 # Don't install py3-pip from apk to avoid PEP 668 issues
