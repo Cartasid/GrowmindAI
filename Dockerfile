@@ -28,15 +28,19 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Install Python dependencies with exact pinned versions
-# Use --break-system-packages for PEP 668 compliance in Alpine 3.19+
-RUN pip3 install --no-cache-dir --no-warn-script-location --break-system-packages \
+# Create a virtual environment to avoid PEP 668 issues
+RUN python3 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+# Upgrade pip, setuptools, wheel in the virtual environment
+RUN pip3 install --no-cache-dir --no-warn-script-location \
     --upgrade pip \
     setuptools \
     wheel
 
 # Create constraints file for reproducible builds
 COPY backend/pyproject.toml backend/requirements.txt* ./
-RUN pip3 install --no-cache-dir --no-warn-script-location --break-system-packages \
+RUN pip3 install --no-cache-dir --no-warn-script-location \
     "fastapi==0.109.0" \
     "uvicorn[standard]==0.27.0" \
     "httpx==0.26.0" \
