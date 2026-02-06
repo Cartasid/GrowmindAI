@@ -186,6 +186,7 @@ async def rate_limit_middleware(request: Request, call_next):
         cutoff = now - RATE_LIMIT_WINDOW_SECONDS
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
+        # Check BEFORE adding the request to prevent off-by-one error
         if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
             return JSONResponse({"detail": "Rate limit exceeded."}, status_code=429)
         bucket.append(now)

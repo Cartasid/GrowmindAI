@@ -86,6 +86,9 @@ export const useLightingEngine = () => {
   useEffect(() => {
     let isMounted = true;
     let socket: WebSocket | null = null;
+    let reconnectAttempts = 0;
+    const maxReconnectDelay = 60000; // 60 seconds max
+    const baseReconnectDelay = 3000; // 3 seconds base
 
     const fetchInitial = async () => {
       try {
@@ -106,6 +109,11 @@ export const useLightingEngine = () => {
     const connectWebSocket = () => {
       socket = new WebSocket(wsUrl("/ws/lighting"));
 
+      socket.onopen = () => {
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts = 0;
+      };
+
       socket.onmessage = (event) => {
         try {
           const parsed = JSON.parse(event.data);
@@ -120,7 +128,13 @@ export const useLightingEngine = () => {
 
       socket.onclose = () => {
         if (!isMounted) return;
-        setTimeout(connectWebSocket, 3000);
+        // Exponential backoff with max delay
+        reconnectAttempts++;
+        const delay = Math.min(
+          baseReconnectDelay * Math.pow(2, reconnectAttempts - 1),
+          maxReconnectDelay
+        );
+        setTimeout(connectWebSocket, delay);
       };
 
       socket.onerror = () => {
