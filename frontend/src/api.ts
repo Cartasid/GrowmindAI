@@ -5,9 +5,10 @@
  */
 
 function getBasePath(): string {
-  // In HA ingress the page is served under /api/hassio/ingress/<token>/
-  // We detect this from the current page URL.
-  const match = window.location.pathname.match(/^(\/api\/hassio\/ingress\/[^/]+)/);
+  // In HA ingress the page is served under one of these prefixes.
+  const match = window.location.pathname.match(
+    /^(\/api\/hassio\/ingress\/[^/]+|\/api\/hassio_ingress\/[^/]+|\/api\/ingress\/[^/]+)/
+  );
   if (match) {
     return match[1];
   }

@@ -687,7 +687,12 @@ export function NutrientCalculator() {
           </motion.div>
 
           <motion.div variants={fadeUp}>
-            <MixingInstructionsPanel />
+            <MixingInstructionsPanel
+              mix={result?.mix}
+              ppm={result?.ppm}
+              reservoirLiters={inputs.reservoir}
+              topDress={result?.top_dress}
+            />
           </motion.div>
 
           {inventory && (

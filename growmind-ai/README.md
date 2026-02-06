@@ -44,6 +44,7 @@ GrowMind AI is an intelligent assistant for cannabis cultivation that integrates
 - **Gemini Model**: Model to use for AI analysis (default: gemini-2.5-flash)
 - **HASS Token**: Optional Home Assistant long-lived access token (fallback for API auth if Supervisor token is unavailable)
 - **Water Profile Presets**: Optional JSON list to override water profile presets for plan optimizer
+- **Water Profile Base**: Optional JSON object to override the default base profile used by presets
 
 Example `water_profile_presets` value:
 
@@ -63,6 +64,27 @@ Example `water_profile_presets` value:
       "osmosisShare": 0.8
    }
 ]
+```
+
+Example `water_profile_base` value:
+
+```json
+{
+   "N": 0.05,
+   "Ca": 70.0,
+   "Mg": 35.0,
+   "K": 2.0,
+   "Na": 8.0,
+   "Cl": 18.0,
+   "S": 72.0,
+   "Fe": 0.02,
+   "Mn": 0.02,
+   "B": 0.02,
+   "Mo": 0.01,
+   "Zn": 0.02,
+   "Cu": 0.01,
+   "P": 0.0
+}
 ```
 
 ## Usage

@@ -262,7 +262,7 @@ DEFAULT_PLAN: Dict[CultivarLiteral, Dict[SubstrateLiteral, Dict[str, Any]]] = {
 
 
 def _water_profile_presets(substrate: SubstrateLiteral) -> List[Dict[str, Any]]:
-    base_profile = deepcopy(DEFAULT_WATER_PROFILE)
+    base_profile = _configured_base_water_profile()
     base_osmosis = DEFAULT_OSMOSIS_SHARES.get(substrate, 0.0)
     configured_presets = _configured_water_profile_presets(substrate, base_profile, base_osmosis)
     if configured_presets:
@@ -331,6 +331,23 @@ def _merge_water_profile(base_profile: Dict[str, float], override: Any) -> Dict[
         if key in override:
             merged[key] = _coerce_float(override.get(key), merged.get(key, 0.0))
     return merged
+
+
+def _configured_base_water_profile() -> Dict[str, float]:
+    options = _read_addon_options()
+    raw_profile: Any = options.get("water_profile_base")
+    if isinstance(raw_profile, str):
+        raw_profile = raw_profile.strip()
+        if raw_profile:
+            try:
+                raw_profile = json.loads(raw_profile)
+            except json.JSONDecodeError:
+                raw_profile = None
+        else:
+            raw_profile = None
+    if not isinstance(raw_profile, dict):
+        raw_profile = None
+    return _merge_water_profile(DEFAULT_WATER_PROFILE, raw_profile)
 
 
 def _configured_water_profile_presets(
