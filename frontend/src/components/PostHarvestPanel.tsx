@@ -12,6 +12,8 @@ const DEFAULT_THRESHOLDS = {
   water_activity: { min: 0.55, max: 0.65, unit: "aw" },
 };
 
+const THRESHOLDS_STORAGE_KEY = "growmind.dryRoomThresholds";
+
 type DryRoomItem = {
   role?: string;
   label?: string;
@@ -20,8 +22,8 @@ type DryRoomItem = {
   value?: string | number | null;
 };
 
-const statusFor = (role: string, value: number | null) => {
-  const threshold = DEFAULT_THRESHOLDS[role as keyof typeof DEFAULT_THRESHOLDS];
+const statusFor = (role: string, value: number | null, thresholds: typeof DEFAULT_THRESHOLDS) => {
+  const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
   if (!threshold || value == null) return "unknown";
   if (value < threshold.min || value > threshold.max) return "warn";
   return "ok";
@@ -39,7 +41,30 @@ const toNumber = (value: unknown): number | null => {
 export function PostHarvestPanel() {
   const [config, setConfig] = useState<ConfigMap | null>(null);
   const [loading, setLoading] = useState(false);
+  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(THRESHOLDS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as typeof DEFAULT_THRESHOLDS;
+        setThresholds({ ...DEFAULT_THRESHOLDS, ...parsed });
+      }
+    } catch {
+      setThresholds(DEFAULT_THRESHOLDS);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(THRESHOLDS_STORAGE_KEY, JSON.stringify(thresholds));
+    } catch {
+      // ignore storage errors
+    }
+  }, [thresholds]);
 
   useEffect(() => {
     let active = true;
@@ -66,7 +91,7 @@ export function PostHarvestPanel() {
 
   const handleCreateDefaultAlerts = async () => {
     try {
-      const entries = Object.entries(DEFAULT_THRESHOLDS);
+      const entries = Object.entries(thresholds);
       for (const [role, threshold] of entries) {
         await saveAlert({
           name: `Dry Room ${role}`,
@@ -81,6 +106,20 @@ export function PostHarvestPanel() {
     } catch (err) {
       addToast({ title: "Alerts fehlgeschlagen", description: String(err), variant: "error" });
     }
+  };
+
+  const updateThreshold = (role: keyof typeof DEFAULT_THRESHOLDS, key: "min" | "max", value: string) => {
+    const numeric = Number(value.replace(",", "."));
+    if (!Number.isFinite(numeric)) return;
+    setThresholds((prev) => ({
+      ...prev,
+      [role]: { ...prev[role], [key]: numeric },
+    }));
+  };
+
+  const resetThresholds = () => {
+    setThresholds(DEFAULT_THRESHOLDS);
+    addToast({ title: "Defaults wiederhergestellt", variant: "success" });
   };
 
   const handleCreateTasks = async () => {
@@ -127,14 +166,49 @@ export function PostHarvestPanel() {
         >
           Post-Harvest Tasks
         </button>
+        <button
+          className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70"
+          onClick={resetThresholds}
+        >
+          Defaults reset
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <p className="meta-mono text-[11px] text-white/50">Dry Room Targets</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {(Object.keys(DEFAULT_THRESHOLDS) as Array<keyof typeof DEFAULT_THRESHOLDS>).map((role) => {
+            const entry = thresholds[role];
+            return (
+              <div key={role} className="glass-card rounded-2xl px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/40">{role}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={entry.min}
+                    onChange={(event) => updateThreshold(role, "min", event.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-xs text-white"
+                  />
+                  <input
+                    type="number"
+                    value={entry.max}
+                    onChange={(event) => updateThreshold(role, "max", event.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <p className="mt-2 text-[10px] text-white/50">{entry.unit}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {liveStates.map(({ item, state }) => {
           const value = toNumber(state.raw?.state ?? item.value);
           const role = item.role ?? "";
-          const status = statusFor(role, value);
-          const threshold = DEFAULT_THRESHOLDS[role as keyof typeof DEFAULT_THRESHOLDS];
+          const status = statusFor(role, value, thresholds);
+          const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
           return (
             <div key={role || item.label} className="glass-card rounded-2xl px-4 py-3">
               <p className="text-xs uppercase tracking-[0.3em] text-white/40">{item.label || role}</p>
@@ -142,7 +216,7 @@ export function PostHarvestPanel() {
                 {value != null ? value.toFixed(2) : "—"} {item.unit || threshold?.unit || ""}
               </p>
               <p className={`mt-1 text-xs ${status === "warn" ? "text-brand-orange" : "text-white/50"}`}>
-                {status === "warn" ? "Ausserhalb Default" : status === "ok" ? "Im Ziel" : "Kein Wert"}
+                {status === "warn" ? "Ausserhalb Target" : status === "ok" ? "Im Ziel" : "Kein Wert"}
               </p>
             </div>
           );

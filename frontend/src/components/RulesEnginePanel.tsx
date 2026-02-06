@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { deleteRule, fetchRules, saveRule, type Rule } from "../services/operationsService";
+import { fetchConfig, type ConfigMap } from "../services/configService";
 import { useToast } from "./ToastProvider";
 
 const emptyRule: Rule = {
@@ -17,6 +18,8 @@ export function RulesEnginePanel() {
   const [draft, setDraft] = useState<Rule>(emptyRule);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [config, setConfig] = useState<ConfigMap | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
   const { addToast } = useToast();
 
   const load = () => {
@@ -29,7 +32,81 @@ export function RulesEnginePanel() {
 
   useEffect(() => {
     load();
+    fetchConfig()
+      .then((data) => setConfig(data))
+      .catch(() => setConfig(null));
   }, []);
+
+  const valueMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!config) return map;
+    Object.values(config).forEach((category) => {
+      const items = ([] as any[]).concat(category?.inputs ?? [], category?.targets ?? []);
+      items.forEach((item) => {
+        if (!item?.role) return;
+        const numeric = Number(String(item.value ?? "").replace(",", "."));
+        if (Number.isFinite(numeric)) map[item.role] = numeric;
+      });
+    });
+    return map;
+  }, [config, previewTick]);
+
+  const resolveMetricValue = (metric: string) => {
+    const key = metric.toLowerCase();
+    const roleCandidates: Record<string, string[]> = {
+      vpd: ["actual_vpd", "vpd_day_min", "vpd_day_max"],
+      vwc: ["actual_vwc", "vwc_day_min", "vwc_day_max"],
+      ec: ["actual_ecp", "ecp_day_min", "ecp_day_max", "soil_ec"],
+      ph: ["ph_target"],
+      temp: ["actual_temp", "temp_day_min", "temp_day_max"],
+      humidity: ["actual_humidity", "hum_day_min", "hum_day_max"],
+      co2: ["actual_co2", "co2_target"],
+    };
+    const roles = roleCandidates[key] ?? [key];
+    for (const role of roles) {
+      if (role in valueMap) return valueMap[role];
+    }
+    return null;
+  };
+
+  const parseWhen = (text: string) => {
+    const normalized = text.replace(/,/g, ".");
+    const match = normalized.match(/([A-Za-z_]+)\s*(>=|<=|>|<|=)\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (!match) return null;
+    let metric = match[1].toLowerCase();
+    if (metric === "rh" || metric === "hum") metric = "humidity";
+    if (metric === "temp") metric = "temp";
+    const operator = match[2];
+    const threshold = Number(match[3]);
+    if (!Number.isFinite(threshold)) return null;
+    return { metric, operator, threshold };
+  };
+
+  const preview = useMemo(() => {
+    return items.map((rule) => {
+      const parsed = parseWhen(rule.when || "");
+      if (!parsed) return { id: rule.id, status: "unknown", value: null };
+      const value = resolveMetricValue(parsed.metric);
+      if (value == null) return { id: rule.id, status: "unknown", value: null };
+      const ok = (() => {
+        switch (parsed.operator) {
+          case ">":
+            return value > parsed.threshold;
+          case ">=":
+            return value >= parsed.threshold;
+          case "<":
+            return value < parsed.threshold;
+          case "<=":
+            return value <= parsed.threshold;
+          case "=":
+            return Math.abs(value - parsed.threshold) < 0.0001;
+          default:
+            return false;
+        }
+      })();
+      return { id: rule.id, status: ok ? "match" : "no-match", value };
+    });
+  }, [items, valueMap]);
 
   const handleSave = async () => {
     if (!draft.name.trim() || !draft.when.trim() || !draft.then.trim()) {
@@ -90,7 +167,20 @@ export function RulesEnginePanel() {
             <input
               value={draft.name}
               onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+              <div className="flex items-center justify-between text-xs text-white/60">
+                <span>Preview: Dry-run mit aktuellen Werten</span>
+                <button
+                  className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] text-white/70"
+                  onClick={() => setPreviewTick((prev) => prev + 1)}
+                >
+                  Preview aktualisieren
+                </button>
+              </div>
               placeholder="Name"
+                const previewState = preview.find((entry) => entry.id === item.id || (!item.id && index === index));
+                const status = previewState?.status ?? "unknown";
+                const statusLabel =
+                  status === "match" ? "MATCH" : status === "no-match" ? "NO MATCH" : "UNKNOWN";
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
             <input
@@ -99,6 +189,17 @@ export function RulesEnginePanel() {
               placeholder="WENN z.B. VPD > 1.6 oder RH < 52"
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[10px] ${
+                            status === "match"
+                              ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+                              : status === "no-match"
+                              ? "border-white/10 bg-black/40 text-white/70"
+                              : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
+                          }`}
+                        >
+                          {statusLabel}
+                        </span>
             <input
               value={draft.then}
               onChange={(event) => setDraft((prev) => ({ ...prev, then: event.target.value }))}

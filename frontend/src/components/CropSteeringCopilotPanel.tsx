@@ -94,6 +94,36 @@ export function CropSteeringCopilotPanel() {
     }
   };
 
+  const handleSaveAll = async () => {
+    if (!result) return;
+    try {
+      await Promise.all([
+        ...result.rules.map((rule) =>
+          saveRule({
+            name: rule.name,
+            enabled: true,
+            when: rule.when,
+            then: rule.then,
+            priority: rule.priority ?? "medium",
+          })
+        ),
+        ...result.alerts.map((alert) =>
+          saveAlert({
+            name: alert.name,
+            metric: alert.metric,
+            operator: alert.operator,
+            threshold: alert.threshold,
+            severity: alert.severity ?? "warning",
+            enabled: true,
+          })
+        ),
+      ]);
+      addToast({ title: "Alles gespeichert", variant: "success" });
+    } catch (err) {
+      addToast({ title: "Speichern fehlgeschlagen", description: String(err), variant: "error" });
+    }
+  };
+
   return (
     <section className="glass-panel tactical-grid relative overflow-hidden rounded-3xl p-5 shadow-neon sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -145,6 +175,14 @@ export function CropSteeringCopilotPanel() {
           )}
           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
             <p className="meta-mono text-[11px] text-white/50">Rules</p>
+            {result?.rules?.length ? (
+              <button
+                className="mt-2 rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-3 py-1 text-[10px] text-brand-cyan"
+                onClick={handleSaveAll}
+              >
+                Alles speichern
+              </button>
+            ) : null}
             <div className="mt-3 space-y-3">
               {(result?.rules ?? []).map((rule, index) => (
                 <div key={`${rule.name}-${index}`} className="glass-card rounded-2xl px-4 py-3">
