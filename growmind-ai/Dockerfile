@@ -30,17 +30,16 @@ WORKDIR /app
 # Install Python dependencies with exact pinned versions
 # Create a virtual environment to avoid PEP 668 issues
 RUN python3 -m venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
 
-# Upgrade pip, setuptools, wheel in the virtual environment
-RUN pip3 install --no-cache-dir --no-warn-script-location \
+# Use the venv pip directly with full path
+RUN /app/venv/bin/pip3 install --no-cache-dir --no-warn-script-location \
     --upgrade pip \
     setuptools \
     wheel
 
 # Create constraints file for reproducible builds
 COPY backend/pyproject.toml backend/requirements.txt* ./
-RUN pip3 install --no-cache-dir --no-warn-script-location \
+RUN /app/venv/bin/pip3 install --no-cache-dir --no-warn-script-location \
     "fastapi==0.109.0" \
     "uvicorn[standard]==0.27.0" \
     "httpx==0.26.0" \
@@ -60,6 +59,10 @@ COPY --from=frontend-builder /frontend/dist ./backend/app/static
 
 # Copy s6-overlay service definition with execute bit
 COPY --chmod=755 rootfs/ /
+
+# Set environment variables for venv
+ENV PATH="/app/venv/bin:$PATH"
+ENV VIRTUAL_ENV=/app/venv
 
 # Health check to detect if service is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
