@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { deleteRule, fetchRules, saveRule, type Rule } from "../services/operationsService";
-import { fetchConfig, type ConfigMap } from "../services/configService";
+import { fetchConfig, updateConfigValue, type ConfigMap } from "../services/configService";
 import { useToast } from "./ToastProvider";
 
 const emptyRule: Rule = {
@@ -51,6 +51,21 @@ export function RulesEnginePanel() {
     return map;
   }, [config, previewTick]);
 
+  const roleIndex = useMemo(() => {
+    const index: Record<string, string> = {};
+    if (!config) return index;
+    Object.entries(config).forEach(([categoryKey, category]) => {
+      const inputs = Array.isArray(category?.inputs) ? category.inputs : [];
+      inputs.forEach((item) => {
+        if (!item?.role) return;
+        if (!(item.role in index)) {
+          index[item.role] = categoryKey;
+        }
+      });
+    });
+    return index;
+  }, [config]);
+
   const resolveMetricValue = (metric: string) => {
     const key = metric.toLowerCase();
     const roleCandidates: Record<string, string[]> = {
@@ -80,6 +95,22 @@ export function RulesEnginePanel() {
     const threshold = Number(match[3]);
     if (!Number.isFinite(threshold)) return null;
     return { metric, operator, threshold };
+  };
+
+  const parseThen = (text: string) => {
+    const normalized = text.toLowerCase();
+    const role = Object.keys(roleIndex).find((candidate) => normalized.includes(candidate.toLowerCase()));
+    if (!role) return null;
+    const hasToggleOn = /(toggle|turn|schalte)\s+.*(on|an)/.test(normalized);
+    const hasToggleOff = /(toggle|turn|schalte)\s+.*(off|aus)/.test(normalized);
+    if (hasToggleOn || hasToggleOff) {
+      return { role, category: roleIndex[role], value: hasToggleOn };
+    }
+    const numberMatch = normalized.match(/(-?[0-9]+(?:\.[0-9]+)?)/);
+    if (!numberMatch) return null;
+    const numeric = Number(numberMatch[1]);
+    if (!Number.isFinite(numeric)) return null;
+    return { role, category: roleIndex[role], value: numeric };
   };
 
   const preview = useMemo(() => {
@@ -143,6 +174,47 @@ export function RulesEnginePanel() {
       addToast({ title: "Rule geloescht", variant: "success" });
     } catch (err) {
       addToast({ title: "Rule loeschen fehlgeschlagen", description: String(err), variant: "error" });
+    }
+  };
+
+  const handleExecuteMatches = async () => {
+    if (!config) {
+      addToast({ title: "Config fehlt", description: "Bitte Sensor-Mapping laden.", variant: "error" });
+      return;
+    }
+    const actions = items
+      .map((rule, index) => ({ rule, preview: preview[index] }))
+      .filter((entry) => entry.preview?.status === "match")
+      .map((entry) => ({
+        rule: entry.rule,
+        action: parseThen(entry.rule.then || ""),
+      }));
+
+    if (!actions.length) {
+      addToast({ title: "Keine Matches", description: "Keine Regel ist aktiv.", variant: "info" });
+      return;
+    }
+
+    const results = await Promise.all(
+      actions.map(async ({ rule, action }) => {
+        if (!action) {
+          return { ok: false, rule: rule.name };
+        }
+        try {
+          await updateConfigValue({ category: action.category, role: action.role, value: action.value });
+          return { ok: true, rule: rule.name };
+        } catch {
+          return { ok: false, rule: rule.name };
+        }
+      })
+    );
+
+    const success = results.filter((item) => item.ok).length;
+    const failed = results.length - success;
+    if (success) {
+      addToast({ title: "Regeln ausgefuehrt", description: `${success} ok, ${failed} fehlgeschlagen`, variant: "success" });
+    } else {
+      addToast({ title: "Ausfuehrung fehlgeschlagen", description: "Keine Regel konnte ausgefuehrt werden.", variant: "error" });
     }
   };
 
@@ -211,12 +283,20 @@ export function RulesEnginePanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs text-white/60">
             <span>Preview: Dry-run mit aktuellen Werten</span>
-            <button
-              className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] text-white/70"
-              onClick={() => setPreviewTick((prev) => prev + 1)}
-            >
-              Preview aktualisieren
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] text-white/70"
+                onClick={() => setPreviewTick((prev) => prev + 1)}
+              >
+                Preview aktualisieren
+              </button>
+              <button
+                className="rounded-full border border-grow-lime/40 bg-grow-lime/10 px-3 py-1 text-[10px] text-grow-lime"
+                onClick={handleExecuteMatches}
+              >
+                Matches ausfuehren
+              </button>
+            </div>
           </div>
           {items.map((item, index) => {
             const previewState = preview[index];

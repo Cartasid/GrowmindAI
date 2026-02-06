@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchConfig, type ConfigMap } from "../services/configService";
 import { useHaEntity } from "../hooks/useHaEntity";
 import { saveAlert, saveTask } from "../services/operationsService";
+import { fetchTimeSeries } from "../services/timeseriesService";
 import { useToast } from "./ToastProvider";
 
 const DEFAULT_THRESHOLDS = {
@@ -13,6 +14,7 @@ const DEFAULT_THRESHOLDS = {
 };
 
 const THRESHOLDS_STORAGE_KEY = "growmind.dryRoomThresholds";
+const SOP_STORAGE_KEY = "growmind.dryRoomSop";
 
 type DryRoomItem = {
   role?: string;
@@ -42,6 +44,8 @@ export function PostHarvestPanel() {
   const [config, setConfig] = useState<ConfigMap | null>(null);
   const [loading, setLoading] = useState(false);
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
+  const [seriesMap, setSeriesMap] = useState<Record<string, { t: string; v: number }[]>>({});
+  const [sop, setSop] = useState<Record<string, boolean>>({});
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -56,6 +60,27 @@ export function PostHarvestPanel() {
       setThresholds(DEFAULT_THRESHOLDS);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(SOP_STORAGE_KEY);
+      if (stored) {
+        setSop(JSON.parse(stored));
+      }
+    } catch {
+      setSop({});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(SOP_STORAGE_KEY, JSON.stringify(sop));
+    } catch {
+      // ignore
+    }
+  }, [sop]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -83,6 +108,16 @@ export function PostHarvestPanel() {
   }, []);
 
   const dryRoomTargets = useMemo(() => (config?.dry_room?.targets ?? []) as DryRoomItem[], [config]);
+
+  useEffect(() => {
+    const entityIds = dryRoomTargets
+      .map((item) => item.entity_id)
+      .filter((id): id is string => Boolean(id));
+    if (!entityIds.length) return;
+    fetchTimeSeries({ entity_ids: entityIds, range_hours: 48, interval_minutes: 30 })
+      .then((payload) => setSeriesMap(payload.series || {}))
+      .catch(() => setSeriesMap({}));
+  }, [dryRoomTargets]);
 
   const liveStates = dryRoomTargets.map((item) => ({
     item,
@@ -203,12 +238,50 @@ export function PostHarvestPanel() {
         </div>
       </div>
 
+      <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <p className="meta-mono text-[11px] text-white/50">SOP Checklist</p>
+        <div className="mt-3 space-y-2 text-xs text-white/70">
+          {[
+            "Filters checken",
+            "Luftstrom pruefen",
+            "RH/Temp verifizieren",
+            "Water Activity Probe",
+            "Daten ins Journal",
+          ].map((item) => (
+            <label key={item} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(sop[item])}
+                onChange={(event) => setSop((prev) => ({ ...prev, [item]: event.target.checked }))}
+              />
+              {item}
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {liveStates.map(({ item, state }) => {
           const value = toNumber(state.raw?.state ?? item.value);
           const role = item.role ?? "";
           const status = statusFor(role, value, thresholds);
           const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
+          const series = item.entity_id ? seriesMap[item.entity_id] : undefined;
+          const sparkline = (() => {
+            if (!series || series.length < 2) return "";
+            const values = series.map((point) => point.v);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = max - min || 1;
+            return values
+              .slice(-12)
+              .map((val, index, arr) => {
+                const x = (index / Math.max(arr.length - 1, 1)) * 100;
+                const y = 24 - ((val - min) / range) * 24;
+                return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+              })
+              .join(" ");
+          })();
           return (
             <div key={role || item.label} className="glass-card rounded-2xl px-4 py-3">
               <p className="text-xs uppercase tracking-[0.3em] text-white/40">{item.label || role}</p>
@@ -218,6 +291,11 @@ export function PostHarvestPanel() {
               <p className={`mt-1 text-xs ${status === "warn" ? "text-brand-orange" : "text-white/50"}`}>
                 {status === "warn" ? "Ausserhalb Target" : status === "ok" ? "Im Ziel" : "Kein Wert"}
               </p>
+              {sparkline && (
+                <svg viewBox="0 0 100 24" className="mt-2 h-6 w-full">
+                  <path d={sparkline} fill="none" stroke="#2FE6FF" strokeWidth="2" />
+                </svg>
+              )}
             </div>
           );
         })}

@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchConfig, type ConfigMap } from "../services/configService";
 import { generateSteeringCopilot, type SteeringCopilotResponse } from "../services/aiService";
-import { saveAlert, saveRule, type AlertConfig, type Rule } from "../services/operationsService";
+import {
+  fetchAlerts,
+  fetchRules,
+  saveAlert,
+  saveRule,
+  type AlertConfig,
+  type Rule,
+} from "../services/operationsService";
 import { useToast } from "./ToastProvider";
 
 const buildTargetsSnapshot = (config: ConfigMap | null) => {
@@ -38,6 +45,8 @@ export function CropSteeringCopilotPanel() {
   const [phase, setPhase] = useState<string>("Vegetative");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SteeringCopilotResponse | null>(null);
+  const [existingRules, setExistingRules] = useState<string[]>([]);
+  const [existingAlerts, setExistingAlerts] = useState<string[]>([]);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -48,6 +57,20 @@ export function CropSteeringCopilotPanel() {
       })
       .catch(() => {
         if (active) setConfig(null);
+      });
+    fetchRules()
+      .then((data) => {
+        if (active) setExistingRules(data.map((rule) => rule.name));
+      })
+      .catch(() => {
+        if (active) setExistingRules([]);
+      });
+    fetchAlerts()
+      .then((data) => {
+        if (active) setExistingAlerts(data.map((alert) => alert.name));
+      })
+      .catch(() => {
+        if (active) setExistingAlerts([]);
       });
     return () => {
       active = false;
@@ -66,6 +89,8 @@ export function CropSteeringCopilotPanel() {
       constraints: constraints.split(";").map((item) => item.trim()).filter(Boolean),
       targets,
       current,
+      existingRules,
+      existingAlerts,
     });
     if (!response.ok) {
       addToast({ title: "Copilot fehlgeschlagen", description: response.error.message, variant: "error" });
@@ -132,7 +157,17 @@ export function CropSteeringCopilotPanel() {
           <h2 className="gradient-text mt-1 text-2xl font-light">Crop Steering Copilot</h2>
           <p className="mt-2 text-sm text-white/60">KI-Regel-Engine fuer klare Steuerungslogik.</p>
         </div>
-        <span className="brand-chip normal-case text-[10px]">{loading ? "Analysiert" : "Bereit"}</span>
+        <div className="flex items-center gap-2">
+          {result && (
+            <button
+              className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-3 py-1 text-[10px] text-brand-cyan"
+              onClick={handleSaveAll}
+            >
+              Alles anwenden
+            </button>
+          )}
+          <span className="brand-chip normal-case text-[10px]">{loading ? "Analysiert" : "Bereit"}</span>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">

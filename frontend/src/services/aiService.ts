@@ -234,6 +234,8 @@ export const generateSteeringCopilot = async (payload: {
   targets?: Record<string, unknown>;
   current?: Record<string, unknown>;
   constraints?: string[];
+  existingRules?: string[];
+  existingAlerts?: string[];
 }): Promise<ServiceResult<SteeringCopilotResponse>> => {
   try {
     const response = await fetch(apiUrl("/api/gemini/steering-copilot"), {

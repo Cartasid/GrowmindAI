@@ -114,6 +114,8 @@ class SteeringCopilotPayload(BaseModel):
     targets: Optional[Dict[str, Any]] = None
     current: Optional[Dict[str, Any]] = None
     constraints: Optional[List[str]] = None
+    existingRules: Optional[List[str]] = None
+    existingAlerts: Optional[List[str]] = None
 
 
 def _build_steering_copilot_prompt(payload: SteeringCopilotPayload) -> Tuple[List[types.Part], str]:
@@ -130,11 +132,14 @@ def _build_steering_copilot_prompt(payload: SteeringCopilotPayload) -> Tuple[Lis
         "targets": payload.targets or {},
         "current": payload.current or {},
         "constraints": payload.constraints or [],
+        "existingRules": payload.existingRules or [],
+        "existingAlerts": payload.existingAlerts or [],
     }
     prompt = (
         f"{intro}\n"
         "Return JSON with keys: rules(array[ {name,when,then,priority} ]), alerts(array[ {name,metric,operator,threshold,severity} ]), summary(string).\n"
         "Rules must be human-readable and reference metrics by name. Keep each rule short and actionable.\n"
+        "Avoid duplicates of existingRules and existingAlerts.\n"
         "Return JSON only.\n"
         f"INPUT:{json.dumps(meta, ensure_ascii=False)}"
     )
