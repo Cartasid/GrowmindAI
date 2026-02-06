@@ -5,9 +5,10 @@ ARG CACHEBUST=1
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
-# Use npm ci for reproducible builds (strict lockfile)
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --omit=dev --audit=audit
+# Use npm install to ensure architecture-specific dependencies are fetched correctly
+# We remove package-lock.json to avoid the npm optional dependencies bug on cross-arch builds
+COPY frontend/package.json ./
+RUN npm install --omit=dev --audit=audit
 
 COPY frontend/ .
 RUN npm run build
