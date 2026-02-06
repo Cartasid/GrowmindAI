@@ -45,9 +45,13 @@ def read_plan(
     engine = _get_engine(substrate)
     try:
         result = engine.preview_plan(current_week, reservoir_liters)
+        return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return result
+        raise HTTPException(status_code=400, detail=f"Invalid input: {str(exc)}") from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown phase/stage: {str(exc)}") from exc
+    except (RuntimeError, Exception) as exc:
+        raise HTTPException(status_code=500, detail=f"Nutrient plan error: {str(exc)}") from exc
 
 
 @router.post("/plan")
@@ -55,9 +59,13 @@ def preview_plan(payload: MixRequest) -> Dict[str, Any]:
     engine = _get_engine(payload.substrate)
     try:
         result = engine.preview_plan(payload.week_key, payload.liters)
+        return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return result
+        raise HTTPException(status_code=400, detail=f"Invalid input: {str(exc)}") from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown phase/stage: {str(exc)}") from exc
+    except (RuntimeError, Exception) as exc:
+        raise HTTPException(status_code=500, detail=f"Nutrient plan error: {str(exc)}") from exc
 
 
 @router.post("/confirm")
@@ -65,31 +73,43 @@ def confirm_mix(payload: MixRequest) -> Dict[str, Any]:
     engine = _get_engine(payload.substrate)
     try:
         result = engine.mix_tank(payload.week_key, payload.liters)
+        return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return result
+        raise HTTPException(status_code=400, detail=f"Invalid input: {str(exc)}") from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Unknown phase/stage: {str(exc)}") from exc
+    except (RuntimeError, Exception) as exc:
+        raise HTTPException(status_code=500, detail=f"Mix tank error: {str(exc)}") from exc
 
 
 @router.get("/inventory")
 def read_inventory() -> Dict[str, Any]:
-    engine = _get_engine(None)
-    status = engine.get_stock_status()
-    alerts = engine.check_refill_needed()
-    return {
-        "inventory": status,
-        "alerts": alerts,
-        "refill_needed": alerts,
-    }
+    try:
+        engine = _get_engine(None)
+        status = engine.get_stock_status()
+        alerts = engine.check_refill_needed()
+        return {
+            "inventory": status,
+            "alerts": alerts,
+            "refill_needed": alerts,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Inventory error: {str(exc)}") from exc
 
 
 @router.post("/inventory/consume")
 def consume_inventory(payload: InventoryConsumePayload) -> Dict[str, Any]:
     engine = _get_engine(payload.substrate)
-    engine.consume_mix(payload.consumption)
-    status = engine.get_stock_status()
-    alerts = engine.check_refill_needed()
-    return {
-        "inventory": status,
-        "alerts": alerts,
-        "refill_needed": alerts,
-    }
+    try:
+        engine.consume_mix(payload.consumption)
+        status = engine.get_stock_status()
+        alerts = engine.check_refill_needed()
+        return {
+            "inventory": status,
+            "alerts": alerts,
+            "refill_needed": alerts,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid consumption data: {str(exc)}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Consume error: {str(exc)}") from exc

@@ -4,11 +4,12 @@ version = "0.1.0"
 description = "FastAPI bridge between Cultivation OS frontend and Home Assistant"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi~=0.109",
-    "uvicorn[standard]~=0.27",
-    "httpx~=0.26",
-    "portalocker~=2.8",
-    "google-genai~=0.3"
+    "fastapi>=0.109.0,<0.110.0",
+    "uvicorn[standard]>=0.27.0,<0.28.0",
+    "httpx>=0.26.0,<0.27.0",
+    "portalocker>=2.8.0,<3.0.0",
+    "google-genai>=0.3.0,<0.4.0",
+    "pydantic>=2.0.0,<2.1.0"
 ]
 
 [tool.uvicorn]

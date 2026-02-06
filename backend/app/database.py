@@ -1,6 +1,7 @@
 """Unified SQLite database for GrowMind AI storage."""
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -8,7 +9,7 @@ import re
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,22 @@ class GrowMindDB:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
+
+    @contextlib.contextmanager
+    def transaction(self) -> Generator[sqlite3.Connection, None, None]:
+        """Context manager for database transactions with automatic rollback on error."""
+        conn = self._get_connection()
+        try:
+            # Start transaction with exclusive lock
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Transaction failed, rolled back: {e}")
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self):
         with self._get_connection() as conn:

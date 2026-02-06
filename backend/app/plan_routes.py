@@ -43,19 +43,19 @@ EDITABLE_DEFAULT_CULTIVARS: set[str] = {"blue_dream", "amnesia_haze"}
 
 
 class PlanEntryPayload(BaseModel):
-    phase: str
+    phase: str = Field(..., max_length=100)
     A: float = 0.0
     X: float = Field(0.0, description="Formerly B in VEG, C otherwise")
     BZ: float = 0.0
-    pH: str = ""
-    EC: str = ""
+    pH: str = Field("", max_length=50)
+    EC: str = Field("", max_length=50)
     Tide: Optional[float] = None
     Helix: Optional[float] = None
     Ligand: Optional[float] = None
     Silicate: Optional[float] = None
     SilicateUnit: Optional[Literal["per_liter", "per_plant"]] = None
     durationDays: Optional[int] = 7
-    notes: Optional[List[str]] = None
+    notes: Optional[List[str]] = Field(None, max_length=10)  # Max 10 notes per entry
 
 
 class NutrientProfilePayload(BaseModel):
@@ -77,9 +77,9 @@ class NutrientProfilePayload(BaseModel):
 
 class ManagedPlanPayload(BaseModel):
     id: Optional[str] = None
-    name: str
-    description: Optional[str] = ""
-    plan: List[PlanEntryPayload]
+    name: str = Field(..., max_length=100)
+    description: Optional[str] = Field("", max_length=1000)
+    plan: List[PlanEntryPayload] = Field(..., max_length=50)  # Max 50 entries per plan
     waterProfile: Optional[NutrientProfilePayload] = None
     osmosisShare: Optional[float] = None
     isDefault: Optional[bool] = False

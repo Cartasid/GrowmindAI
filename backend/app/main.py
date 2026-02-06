@@ -19,11 +19,13 @@ from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
 from .database import InvalidIdentifierError
+from .logging_config import setup_secure_logging
 from .plan_routes import router as plan_router
 from .journal_routes import router as journal_router
 from .ai_routes import router as ai_router
 from .telemetry_routes import router as telemetry_router
 from .nutrient_routes import router as nutrient_router
+from .websocket_routes import router as websocket_router
 from .telemetry import telemetry_worker, shutdown_worker
 from .utils import load_mapping
 
@@ -31,7 +33,8 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 logging.getLogger().setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
 
-_SENSITIVE_ENV_KEYS = ("SUPERVISOR_TOKEN", "HASS_TOKEN", "GEMINI_API_KEY", "TELEMETRY_API_KEY")
+# Setup secure logging with credential redaction
+setup_secure_logging()
 
 
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
@@ -70,48 +73,25 @@ def _parse_csv_env(name: str) -> List[str]:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
 
-
-def _sensitive_values() -> List[str]:
-    values = []
-    for key in _SENSITIVE_ENV_KEYS:
-        value = os.getenv(key)
-        if value:
-            values.append(value)
-    return values
-
-
-def _redact_message(message: str) -> str:
-    redacted = message
-    for value in _sensitive_values():
-        if value:
-            redacted = redacted.replace(value, "***")
-    return redacted
-
-
-class SensitiveValueFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            message = record.getMessage()
-        except Exception:
-            return True
-        redacted = _redact_message(message)
-        if redacted != message:
-            record.msg = redacted
-            record.args = ()
-        return True
-
-
-logging.getLogger().addFilter(SensitiveValueFilter())
-
 HASS_API_BASE = _validate_hass_api_base(os.getenv("HASS_API_BASE", "http://supervisor/core/api"))
 CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
 RATE_LIMIT_WINDOW_SECONDS = _env_float("RATE_LIMIT_WINDOW_SECONDS", 60.0, minimum=1.0)
 RATE_LIMIT_MAX_REQUESTS = _env_int("RATE_LIMIT_MAX_REQUESTS", 120, minimum=0)
 RATE_LIMIT_TRUSTED_IPS = set(_parse_csv_env("RATE_LIMIT_TRUSTED_IPS"))
 WS_MAX_ERRORS = _env_int("WS_MAX_ERRORS", 6)
+RATE_LIMIT_CLEANUP_INTERVAL = _env_float("RATE_LIMIT_CLEANUP_INTERVAL", 300.0, minimum=10.0)
+
+# Token handling - clarify usage
+SUPERVISOR_TOKEN = os.getenv("SUPERVISOR_TOKEN", "").strip()
+HASS_TOKEN = os.getenv("HASS_TOKEN", "").strip()
+_ACTUAL_TOKEN = SUPERVISOR_TOKEN or HASS_TOKEN  # Fallback logic
+if not _ACTUAL_TOKEN:
+    logger.warning("No HA authentication token configured (SUPERVISOR_TOKEN or HASS_TOKEN)")
 
 _rate_limit_lock = asyncio.Lock()
 _rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
+_rate_limit_cleanup_task: Optional[asyncio.Task[Any]] = None
+_ws_error_tracking: Dict[str, int] = defaultdict(int)  # Track WS errors per client
 _hass_lock = asyncio.Lock()
 _notify_lock = asyncio.Lock()
 _warned_missing_alerts = False
@@ -121,9 +101,34 @@ _telemetry_stop: Optional[asyncio.Event] = None
 _hass_client: Optional[httpx.AsyncClient] = None
 _last_notify_time = 0.0
 
+async def _rate_limit_cleanup_loop():
+    """Periodic cleanup of old rate limit entries to prevent memory leak."""
+    while True:
+        try:
+            await asyncio.sleep(RATE_LIMIT_CLEANUP_INTERVAL)
+            async with _rate_limit_lock:
+                now = time.time()
+                cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+                # Remove entries that are all stale
+                stale_ips = []
+                for ip, bucket in _rate_limit_store.items():
+                    while bucket and bucket[0] < cutoff:
+                        bucket.popleft()
+                    if not bucket:
+                        stale_ips.append(ip)
+                for ip in stale_ips:
+                    del _rate_limit_store[ip]
+                    _ws_error_tracking.pop(ip, None)  # Also clean up WS error tracking
+                if stale_ips:
+                    logger.debug("Rate limit cleanup: removed %d stale IP entries", len(stale_ips))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("Rate limit cleanup error: %s", e)
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    global _telemetry_task, _telemetry_stop, _hass_client
+    global _telemetry_task, _telemetry_stop, _hass_client, _rate_limit_cleanup_task
     _hass_client = httpx.AsyncClient(
         base_url=HASS_API_BASE,
         timeout=httpx.Timeout(15.0),
@@ -131,8 +136,16 @@ async def lifespan(application: FastAPI):
     )
     _telemetry_stop = asyncio.Event()
     _telemetry_task = asyncio.create_task(telemetry_worker(_telemetry_stop))
+    _rate_limit_cleanup_task = asyncio.create_task(_rate_limit_cleanup_loop())
     logger.info("GrowMind backend started — HA base: %s", HASS_API_BASE)
     yield
+    if _rate_limit_cleanup_task is not None:
+        _rate_limit_cleanup_task.cancel()
+        try:
+            await _rate_limit_cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _rate_limit_cleanup_task = None
     if _telemetry_stop is not None:
         _telemetry_stop.set()
     await shutdown_worker(_telemetry_task)
@@ -145,15 +158,19 @@ async def lifespan(application: FastAPI):
 
 INGRESS_PATH = os.getenv("INGRESS_PATH", "")
 app = FastAPI(title="GrowMind AI", lifespan=lifespan, root_path=INGRESS_PATH)
-if CORS_ALLOWED_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ALLOWED_ORIGINS,
-        allow_headers=["*"],
-        allow_methods=["*"],
-    )
-else:
-    logger.info("CORS_ALLOWED_ORIGINS not set; CORS middleware disabled.")
+# Set CORS defaults if not configured
+if not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]
+    logger.warning("CORS_ALLOWED_ORIGINS not set; using safe defaults: %s", CORS_ALLOWED_ORIGINS)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    max_age=3600,  # Cache preflight for 1 hour
+)
 
 
 @app.middleware("http")
@@ -184,6 +201,7 @@ app.include_router(journal_router)
 app.include_router(ai_router)
 app.include_router(telemetry_router)
 app.include_router(nutrient_router)
+app.include_router(websocket_router)
 
 
 class UpdatePayload(BaseModel):
@@ -198,10 +216,17 @@ _UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
 
 
 def _require_token() -> str:
-    token = os.getenv("SUPERVISOR_TOKEN") or os.getenv("HASS_TOKEN")
-    if not token:
-        raise HTTPException(status_code=500, detail="Home Assistant token missing (SUPERVISOR_TOKEN/HASS_TOKEN)")
-    return token
+    """Get configured Home Assistant authentication token.
+    
+    Tries SUPERVISOR_TOKEN first (add-on context), then HASS_TOKEN (standalone).
+    Tokens are never logged due to secure logging configuration.
+    """
+    if not _ACTUAL_TOKEN:
+        raise HTTPException(
+            status_code=500, 
+            detail="Home Assistant token missing (configure SUPERVISOR_TOKEN or HASS_TOKEN)"
+        )
+    return _ACTUAL_TOKEN
 
 
 def _hass_headers() -> Dict[str, str]:
@@ -213,8 +238,6 @@ def _hass_headers() -> Dict[str, str]:
 
 async def _hass() -> httpx.AsyncClient:
     global _hass_client
-    if _hass_client is not None and not _hass_client.is_closed:
-        return _hass_client
     async with _hass_lock:
         if _hass_client is None or _hass_client.is_closed:
             _hass_client = httpx.AsyncClient(

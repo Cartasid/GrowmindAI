@@ -4,42 +4,60 @@ ARG BUILD_FROM
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install
+# Use npm ci for reproducible builds (strict lockfile)
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --omit=dev --audit=audit
 
 COPY frontend/ .
 RUN npm run build
 
+# Verify build output
+RUN test -d dist && echo "Frontend build successful" || exit 1
+
 # ---------- Stage 2: Runtime image ----------
 FROM ${BUILD_FROM} AS runtime
 
-RUN apk add --no-cache python3 py3-pip bash && \
+# Install Python and essential tools
+RUN apk add --no-cache \
+    python3=3.11.8-r1 \
+    py3-pip=23.3.1-r0 \
+    bash=5.2.21-r0 \
+    wget=1.21.4-r0 && \
     ln -sf python3 /usr/bin/python
 
 WORKDIR /app
 
-# Install backend dependencies (explicit)
-RUN pip3 install --no-cache-dir --break-system-packages --upgrade pip && \
-    pip3 install --no-cache-dir --break-system-packages \
-      "fastapi~=0.109" \
-      "uvicorn[standard]~=0.27" \
-      "httpx~=0.26" \
-      "portalocker~=2.8" \
-      "google-genai~=0.3" \
-      "websockets>=12.0"
+# Install Python dependencies with exact pinned versions
+# Use constraints file for reproducibility
+RUN pip3 install --no-cache-dir --no-warn-script-location \
+    --upgrade pip \
+    setuptools \
+    wheel
+
+# Create constraints file for reproducible builds
+COPY backend/pyproject.toml backend/requirements.txt* ./
+RUN pip3 install --no-cache-dir --no-warn-script-location \
+    "fastapi==0.109.0" \
+    "uvicorn[standard]==0.27.0" \
+    "httpx==0.26.0" \
+    "portalocker==2.8.1" \
+    "google-genai==0.3.0" \
+    "websockets==12.0"
 
 # Copy backend source
 COPY backend/ ./backend/
 
-# Runtime assets
+# Copy runtime configuration
 COPY mapping.json ./mapping.json
-# Provide built frontend as FastAPI static files
-COPY --from=frontend-builder /frontend/dist /app/backend/app/static
+COPY config.yaml ./config.yaml
 
-# s6-overlay service definition
-COPY rootfs/ /
-RUN chmod +x /etc/services.d/growmind/run
+# Copy built frontend as FastAPI static files
+COPY --from=frontend-builder /frontend/dist ./backend/app/static
 
+# Copy s6-overlay service definition with execute bit
+COPY --chmod=755 rootfs/ /
+
+# Health check to detect if service is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:8080/health || exit 1
 

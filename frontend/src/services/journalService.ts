@@ -1,4 +1,4 @@
-import type { AiAnalysisResponse, JournalEntry, JournalEntryType, JournalPriority } from "../types";
+import type { AiAnalysisResponse, JournalEntry, JournalEntryType, JournalPriority, Phase } from "../types";
 import { apiUrl } from "../api";
 
 type Subscriber = () => void;
@@ -14,6 +14,7 @@ type Cache = Record<string, JournalEntry[]>;
 const API_BASE = apiUrl("/api/journal");
 const ENTRY_TYPES: JournalEntryType[] = ["Observation", "Feeding", "Pest", "Training", "Harvest"];
 const PRIORITIES: JournalPriority[] = ["High", "Medium", "Low"];
+const PHASES: Phase[] = ["Seedling", "Vegetative", "Pre-flowering", "Flowering", "Post-flowering", "Harvesting", "Curing"];
 const METRIC_KEYS: MetricsKey[] = [
   "plantHeight",
   "temp",
@@ -139,6 +140,11 @@ export const normalizeEntry = (raw: any): JournalEntry => {
     return (PRIORITIES.includes(value as JournalPriority) ? value : "Medium") as JournalPriority;
   })();
 
+  const phase = (() => {
+    const value = toStringSafe(raw?.phase);
+    return (PHASES.includes(value as Phase) ? value : "Vegetative") as Phase;
+  })();
+
   const notes = typeof raw?.notes === "string" ? raw.notes : "";
   const images = Array.isArray(raw?.images) ? raw.images.filter((item: unknown): item is string => typeof item === "string") : [];
   const tags = Array.isArray(raw?.tags) ? raw.tags.filter((item: unknown): item is string => typeof item === "string") : [];
@@ -149,7 +155,7 @@ export const normalizeEntry = (raw: any): JournalEntry => {
     id,
     growId: toStringSafe(raw?.growId),
     date,
-    phase: toStringSafe(raw?.phase) ?? "Unbekannt",
+    phase,
     entryType,
     priority,
     notes,

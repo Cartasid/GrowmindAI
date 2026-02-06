@@ -9,18 +9,38 @@ import math
 import os
 import random
 import re
+import html
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from google import genai
 from google.genai import errors, types
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 logger = logging.getLogger(__name__)
 _RETRYABLE_API_CODES = {429, 500, 502, 503, 504}
 DEFAULT_MODEL = "models/gemini-2.5-flash"
+
+
+def _sanitize_text(text: Optional[str], max_length: int = 5000) -> Optional[str]:
+    """Sanitize text to prevent prompt injection and limit size.
+    
+    This doesn't remove content, but ensures no control characters that could
+    trick the model are present, and enforces reasonable size limits.
+    """
+    if text is None:
+        return None
+    text = str(text).strip()
+    if not text:
+        return None
+    # Limit length
+    if len(text) > max_length:
+        text = text[:max_length].rstrip()
+    # Remove null bytes and other control characters (keep newlines/tabs)
+    text = ''.join(c for c in text if ord(c) >= 32 or c in '\n\t\r')
+    return text
 
 
 class AnalyzeImagePayload(BaseModel):
@@ -32,10 +52,37 @@ class AnalyzeImagePayload(BaseModel):
     lang: Optional[str] = "en"
     ppm: Optional[Dict[str, float]] = None
     journalHistory: Optional[List[Dict[str, Any]]] = None
+    
+    @field_validator('prompt', 'userNotes')
+    @classmethod
+    def sanitize_text_fields(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize text inputs to prevent prompt injection."""
+        return _sanitize_text(v)
+    
+    @field_validator('lang')
+    @classmethod
+    def validate_lang(cls, v: str) -> str:
+        """Validate language is reasonable identifier."""
+        if not v or not isinstance(v, str):
+            return "en"
+        # Allow ISO 639-1 codes (e.g., en, de, fr) and regional variants (en-US, de-DE)
+        if not re.match(r'^[a-z]{2}(-[A-Z]{2})?$', v):
+            logger.warning("Invalid language code: %s, using 'en'", v)
+            return "en"
+        return v
 
 
 class AnalyzeTextPayload(BaseModel):
     text: str
+    
+    @field_validator('text')
+    @classmethod
+    def sanitize_text(cls, v: str) -> str:
+        """Sanitize text input."""
+        sanitized = _sanitize_text(v)
+        if not sanitized:
+            raise ValueError("text cannot be empty or contain only control characters")
+        return sanitized
 
 
 class StagePayload(BaseModel):
@@ -177,14 +224,16 @@ def _strip_code_fences(value: str) -> str:
 def _extract_json(value: str) -> Optional[Any]:
     try:
         return json.loads(value)
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
+        # JSON parse failed, try stripping code fences
         pass
     stripped = _strip_code_fences(value)
     if stripped != value:
         try:
             return json.loads(stripped)
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError, ValueError):
+            # Even stripped version invalid
+            logger.debug("Failed to parse JSON from value: %s", value[:100])
     return None
 
 

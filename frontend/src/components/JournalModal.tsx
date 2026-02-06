@@ -5,6 +5,7 @@ import type {
   AnalyzerInputs,
   JournalEntry,
   Language,
+  Phase,
 } from "../types";
 import { useJournal } from "../hooks/useJournal";
 import { analyzeGrowthStage, analyzePlantImage } from "../services/aiService";
@@ -14,7 +15,7 @@ interface JournalModalProps {
   onClose: () => void;
   growId: string;
   lang: Language;
-  phase: string;
+  phase: Phase;
   analyzerInputs?: AnalyzerInputs;
 }
 
@@ -29,7 +30,7 @@ const fileToBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-const createEmptyEntry = (phase: string): Partial<JournalEntry> => ({
+const createEmptyEntry = (phase: Phase): Partial<JournalEntry> => ({
   date: new Date().toISOString(),
   phase,
   entryType: "Observation",

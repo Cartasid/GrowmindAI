@@ -1,6 +1,6 @@
 export type Cultivar = 'wedding_cake' | 'blue_dream' | 'amnesia_haze';
 export type Substrate = 'coco' | 'soil' | 'rockwool';
-export type Phase = string;
+export type Phase = 'Seedling' | 'Vegetative' | 'Pre-flowering' | 'Flowering' | 'Post-flowering' | 'Harvesting' | 'Curing';
 export type Language = 'en' | 'de';
 
 export interface AnalyzerInputs {
@@ -29,12 +29,29 @@ export interface PlanEntry {
   notes?: string[];
 }
 
+export interface NutrientProfile {
+  N?: number;
+  P?: number;
+  K?: number;
+  Ca?: number;
+  Mg?: number;
+  S?: number;
+  Na?: number;
+  Fe?: number;
+  B?: number;
+  Mo?: number;
+  Mn?: number;
+  Zn?: number;
+  Cu?: number;
+  Cl?: number;
+}
+
 export interface ManagedPlan {
   id: string;
   name: string;
   description?: string;
   plan: PlanEntry[];
-  waterProfile: Record<string, number>;
+  waterProfile: NutrientProfile;
   osmosisShare: number;
   isDefault?: boolean;
 }
