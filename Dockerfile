@@ -5,9 +5,10 @@ ARG CACHEBUST=1
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
-# Use npm ci for reproducible builds (strict lockfile)
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --omit=dev --audit=audit
+# Use npm install to ensure architecture-specific dependencies are fetched correctly
+# We remove package-lock.json to avoid the npm optional dependencies bug on cross-arch builds
+COPY frontend/package.json ./
+RUN npm install --omit=dev --audit=audit
 
 COPY frontend/ .
 RUN npm run build
@@ -22,33 +23,35 @@ FROM ${BUILD_FROM} AS runtime
 RUN echo "CACHEBUST=${CACHEBUST}"
 
 # Install Python and essential tools
-# Don't install py3-pip from apk to avoid PEP 668 issues
 RUN apk add --no-cache \
     python3 \
+    py3-pip \
     bash \
     wget && \
     ln -sf python3 /usr/bin/python
 
+# Allow pip to install to system-wide environment (PEP 668)
+# This is safe because we are in a dedicated container
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
 WORKDIR /app
 
-# Create virtual environment using ensurepip (avoids PEP 668)
-RUN python3 -m venv --upgrade-deps /app/venv
-
-# Install Python packages in venv
-RUN /app/venv/bin/pip3 install --no-cache-dir --no-warn-script-location \
+# Upgrade essential Python tools
+RUN pip3 install --no-cache-dir --no-warn-script-location \
     --upgrade pip \
     setuptools \
     wheel
 
-# Create constraints file for reproducible builds
+# Install Python dependencies
 COPY backend/pyproject.toml backend/requirements.txt* ./
-RUN /app/venv/bin/pip3 install --no-cache-dir --no-warn-script-location \
-    "fastapi==0.109.0" \
-    "uvicorn[standard]==0.27.0" \
-    "httpx==0.26.0" \
-    "portalocker==2.8.1" \
-    "google-genai==0.3.0" \
-    "websockets==12.0"
+RUN pip3 install --no-cache-dir --no-warn-script-location \
+    "fastapi>=0.109.0" \
+    "uvicorn[standard]>=0.27.0" \
+    "httpx>=0.28.0" \
+    "portalocker>=2.8.1" \
+    "google-genai>=1.62.0" \
+    "websockets>=13.0" \
+    "pydantic>=2.9.0"
 
 # Copy backend source
 COPY backend/ ./backend/
@@ -62,10 +65,6 @@ COPY --from=frontend-builder /frontend/dist ./backend/app/static
 
 # Copy s6-overlay service definition with execute bit
 COPY --chmod=755 rootfs/ /
-
-# Set environment variables for venv
-ENV PATH="/app/venv/bin:$PATH"
-ENV VIRTUAL_ENV=/app/venv
 
 # Health check to detect if service is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
