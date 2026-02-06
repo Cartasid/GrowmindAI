@@ -49,36 +49,46 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-900 to-red-700">
-          <div className="text-center px-4">
-            <h1 className="text-4xl font-bold text-white mb-4">⚠️ Oops!</h1>
-            <p className="text-red-100 mb-4 text-lg">Something went wrong</p>
-            
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brand-dark px-6 py-10 text-white">
+          <div className="pointer-events-none absolute inset-0 bg-grid-mask bg-[length:140px_140px] opacity-30" />
+          <div className="pointer-events-none absolute inset-0 bg-grow-gradient blur-3xl opacity-70" />
+          <div className="glass-panel relative w-full max-w-2xl rounded-3xl p-8 text-center shadow-neon">
+            <p className="meta-mono text-[10px] text-white/50">SYSTEM RECOVERY</p>
+            <h1 className="gradient-text mt-3 text-3xl font-light">Unerwarteter Fehler</h1>
+            <p className="mt-3 text-sm text-white/70">
+              Es gab ein Problem beim Laden der Ansicht. Bitte lade die Seite neu oder gehe einen Schritt zurueck.
+            </p>
+
             {this.state.error && (
-              <p className="text-red-200 mb-6 font-mono text-sm break-all">
-                {this.state.error.message || "An unexpected error occurred"}
-              </p>
+              <div className="mt-5 rounded-2xl border border-brand-red/30 bg-brand-red/10 px-4 py-3 text-left text-xs text-brand-red">
+                <p className="meta-mono text-[10px] text-brand-red/80">ERROR</p>
+                <p className="mt-2 break-all font-mono text-[11px] text-brand-red">
+                  {this.state.error.message || "An unexpected error occurred"}
+                </p>
+              </div>
             )}
 
-            <div className="flex gap-4 justify-center">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={() => window.location.reload()}
-                className="px-6 py-2 bg-white text-red-700 rounded-lg font-semibold hover:bg-red-50 transition"
+                className="rounded-full border border-brand-cyan/40 bg-brand-cyan/15 px-6 py-2 text-sm text-brand-cyan shadow-brand-glow transition hover:border-brand-cyan/70 hover:bg-brand-cyan/25"
               >
-                Reload Page
+                Seite neu laden
               </button>
               <button
                 onClick={() => window.history.back()}
-                className="px-6 py-2 bg-red-800 text-white rounded-lg font-semibold hover:bg-red-900 transition"
+                className="rounded-full border border-white/20 bg-black/30 px-6 py-2 text-sm text-white/70 hover:border-brand-cyan/30"
               >
-                Go Back
+                Zurueck
               </button>
             </div>
 
-            {process.env.NODE_ENV === "development" && this.state.errorInfo && (
-              <details className="mt-8 text-left bg-red-800 p-4 rounded text-red-100 text-xs max-w-2xl">
-                <summary className="cursor-pointer font-bold mb-2">Error Details (Dev Mode)</summary>
-                <pre className="whitespace-pre-wrap break-words overflow-auto max-h-64">
+            {import.meta.env.DEV && this.state.errorInfo && (
+              <details className="mt-6 text-left text-xs text-white/70">
+                <summary className="cursor-pointer text-[11px] uppercase tracking-[0.3em] text-white/50">
+                  Error Details (Dev Mode)
+                </summary>
+                <pre className="mt-3 max-h-64 overflow-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-[11px] text-white/70">
                   {this.state.errorInfo.componentStack}
                 </pre>
               </details>

@@ -58,7 +58,7 @@ const ImageWithOverlay = ({ src, overlayText }) => {
   );
 };
 
-export default function Journal({ growId = "default", lang = "de", phase = "VEG" }) {
+export default function Journal({ growId = "default", lang = "de", phase = "Vegetative" }) {
   const { entries } = useJournal(growId);
   const [expandedId, setExpandedId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);

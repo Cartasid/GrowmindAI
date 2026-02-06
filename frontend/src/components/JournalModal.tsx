@@ -20,7 +20,7 @@ interface JournalModalProps {
 }
 
 const JOURNAL_TYPES = ["Observation", "Feeding", "Pest", "Training", "Harvest"] as const;
-const JOURNAL_PRIORITIES = ["High", "Medium", "Low"] as const;
+const JOURNAL_PRIORITIES = ["Critical", "High", "Medium", "Low"] as const;
 
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -102,7 +102,7 @@ export function JournalModal({
 
   const handleImagesSelected = async (files: FileList | null) => {
     if (!files) return;
-    const picked = Array.from(files).slice(0, 5);
+    const picked = Array.from(files).slice(0, 4);
     setLocalImages(picked);
     const payload = await Promise.all(picked.map(fileToBase64));
     setFormData((prev) => ({ ...prev, images: payload }));

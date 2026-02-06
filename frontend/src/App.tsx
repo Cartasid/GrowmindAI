@@ -457,7 +457,7 @@ function App() {
                 )}
                 {activeSection === "journal" && (
                   <motion.div variants={fadeUp}>
-                    <Journal growId="default" lang="de" phase="VEG" />
+                    <Journal growId="default" lang="de" phase="Vegetative" />
                   </motion.div>
                 )}
                 {activeSection === "nutrients" && (

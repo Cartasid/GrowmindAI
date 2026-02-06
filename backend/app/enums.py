@@ -7,12 +7,9 @@ class JournalEntryType(str, Enum):
     """Types of journal entries."""
     OBSERVATION = "Observation"
     FEEDING = "Feeding"
-    WATERING = "Watering"
-    PRUNING = "Pruning"
-    HARVESTING = "Harvesting"
-    TREATMENT = "Treatment"
-    ENVIRONMENT = "Environment"
-    OTHER = "Other"
+    PEST = "Pest"
+    TRAINING = "Training"
+    HARVEST = "Harvest"
     
     @classmethod
     def valid_values(cls) -> Set[str]:

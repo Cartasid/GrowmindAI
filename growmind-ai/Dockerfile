@@ -6,9 +6,8 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 
 # Use npm install to ensure architecture-specific dependencies are fetched correctly
-# We remove package-lock.json to avoid the npm optional dependencies bug on cross-arch builds
 COPY frontend/package.json ./
-RUN npm install --omit=dev --audit=audit
+RUN npm install --no-audit --no-fund
 
 COPY frontend/ .
 RUN npm run build

@@ -1,10 +1,14 @@
 """Telemetry opt-in and manual trigger endpoints."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .telemetry import get_settings, set_enabled, send_daily_payload
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
 
@@ -47,7 +51,6 @@ async def trigger_send(payload: TelemetryTriggerPayload | None = None) -> dict:
         raise HTTPException(status_code=502, detail="Network error") from exc
     except Exception as exc:
         # Unexpected errors
-        import traceback
         logger.exception("Unexpected error during telemetry send")
         raise HTTPException(status_code=500, detail="Telemetry send failed") from exc
     return {"sent": sent}

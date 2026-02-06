@@ -73,11 +73,22 @@ const EntryTypeButton: React.FC<{ type: JournalEntryType; label: string; icon: R
 
 const PriorityButton: React.FC<{ priority: JournalPriority, label: string; icon: React.ReactNode; isActive: boolean; onClick: () => void; }> = ({ priority, label, icon, isActive, onClick }) => {
     const priorityColors: Record<JournalPriority, string> = {
+        Critical: 'text-red-500',
         High: 'text-red-400',
         Medium: 'text-yellow-400',
         Low: 'text-blue-400',
     };
-    const activeClass = isActive ? `bg-white/10 ring-1 ${priority === 'High' ? 'ring-red-500' : priority === 'Medium' ? 'ring-yellow-500' : 'ring-blue-500'}` : 'bg-black/20 hover:bg-white/5';
+    const activeClass = isActive
+      ? `bg-white/10 ring-1 ${
+          priority === 'Critical'
+            ? 'ring-red-600'
+            : priority === 'High'
+            ? 'ring-red-500'
+            : priority === 'Medium'
+            ? 'ring-yellow-500'
+            : 'ring-blue-500'
+        }`
+      : 'bg-black/20 hover:bg-white/5';
 
     return (
         <button onClick={onClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all ${activeClass}`}>
@@ -415,10 +426,11 @@ const JournalModal: React.FC<JournalModalProps> = ({
     Harvest: <HarvestIcon className="w-5 h-5" />,
   };
   
-   const priorityIcons: Record<JournalPriority, React.ReactNode> = {
-      High: <ChevronUp className="w-4 h-4"/>,
-      Medium: <Minus className="w-4 h-4"/>,
-      Low: <ChevronDown className="w-4 h-4"/>,
+  const priorityIcons: Record<JournalPriority, React.ReactNode> = {
+    Critical: <AlertTriangle className="w-4 h-4"/>,
+    High: <ChevronUp className="w-4 h-4"/>,
+    Medium: <Minus className="w-4 h-4"/>,
+    Low: <ChevronDown className="w-4 h-4"/>,
   }
 
   const entryTypeColors: Record<JournalEntryType, string> = {
@@ -429,10 +441,11 @@ const JournalModal: React.FC<JournalModalProps> = ({
     Harvest: 'text-orange-400',
   };
   
-   const priorityColors: Record<JournalPriority, string> = {
-      High: 'text-red-400',
-      Medium: 'text-yellow-400',
-      Low: 'text-blue-400',
+  const priorityColors: Record<JournalPriority, string> = {
+    Critical: 'text-red-500',
+    High: 'text-red-400',
+    Medium: 'text-yellow-400',
+    Low: 'text-blue-400',
   };
   
   const renderConfidenceBadge = (confidence: 'High' | 'Medium' | 'Low') => {
@@ -1012,6 +1025,7 @@ const JournalModal: React.FC<JournalModalProps> = ({
                     <Filter className="w-4 h-4 text-muted"/>
                     <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value as any)} className="bg-transparent text-text border-0 focus:ring-0 text-sm">
                         <option value="All">{t('journal_all_priorities')}</option>
+                        <option value="Critical">{t('journal_priority_Critical')}</option>
                         <option value="High">{t('journal_priority_High')}</option>
                         <option value="Medium">{t('journal_priority_Medium')}</option>
                         <option value="Low">{t('journal_priority_Low')}</option>

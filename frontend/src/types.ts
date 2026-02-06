@@ -73,7 +73,7 @@ export interface HASensorMapping {
 }
 
 export type JournalEntryType = 'Observation' | 'Feeding' | 'Pest' | 'Training' | 'Harvest';
-export type JournalPriority = 'High' | 'Medium' | 'Low';
+export type JournalPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 
 export interface JournalMetrics {
   plantHeight?: number;

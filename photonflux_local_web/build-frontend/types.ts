@@ -97,7 +97,7 @@ export interface PlanOptimizationResponse {
 export type StageClass = "VEG" | "B1" | "P23" | "P47" | "W8" | "RIPEN";
 
 export type JournalEntryType = 'Observation' | 'Feeding' | 'Pest' | 'Training' | 'Harvest';
-export type JournalPriority = 'High' | 'Medium' | 'Low';
+export type JournalPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 
 export interface StageAnalysisResult {
   stage: 'Vegetative' | 'Flowering' | 'Ripening';

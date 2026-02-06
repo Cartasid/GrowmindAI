@@ -13,8 +13,7 @@ type Cache = Record<string, JournalEntry[]>;
 
 const API_BASE = apiUrl("/api/journal");
 const ENTRY_TYPES: JournalEntryType[] = ["Observation", "Feeding", "Pest", "Training", "Harvest"];
-const PRIORITIES: JournalPriority[] = ["High", "Medium", "Low"];
-const PHASES: Phase[] = ["Seedling", "Vegetative", "Pre-flowering", "Flowering", "Post-flowering", "Harvesting", "Curing"];
+const PRIORITIES: JournalPriority[] = ["Critical", "High", "Medium", "Low"];
 const METRIC_KEYS: MetricsKey[] = [
   "plantHeight",
   "temp",
@@ -140,10 +139,7 @@ export const normalizeEntry = (raw: any): JournalEntry => {
     return (PRIORITIES.includes(value as JournalPriority) ? value : "Medium") as JournalPriority;
   })();
 
-  const phase = (() => {
-    const value = toStringSafe(raw?.phase);
-    return (PHASES.includes(value as Phase) ? value : "Vegetative") as Phase;
-  })();
+  const phase = (toStringSafe(raw?.phase) ?? "Vegetative") as Phase;
 
   const notes = typeof raw?.notes === "string" ? raw.notes : "";
   const images = Array.isArray(raw?.images) ? raw.images.filter((item: unknown): item is string => typeof item === "string") : [];
