@@ -56,7 +56,7 @@ const toStringSafe = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const normalizeMetrics = (raw: any): JournalEntry["metrics"] => {
+const normalizeMetrics = (raw: Record<string, unknown>): JournalEntry["metrics"] => {
   const metrics: JournalEntry["metrics"] = {};
   METRIC_KEYS.forEach((key) => {
     const value = toNumber(raw?.[key]);
@@ -67,7 +67,7 @@ const normalizeMetrics = (raw: any): JournalEntry["metrics"] => {
   return metrics;
 };
 
-const normalizeFeeding = (raw: any): JournalEntry["feedingDetails"] | undefined => {
+const normalizeFeeding = (raw: Record<string, unknown>): JournalEntry["feedingDetails"] | undefined => {
   if (!raw || typeof raw !== "object") return undefined;
   const feeding: Partial<JournalEntry["feedingDetails"]> = {};
   FEEDING_FIELDS.forEach((key) => {

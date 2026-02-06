@@ -226,11 +226,29 @@ export const useSensorStatus = ({
       const state = raw?.state;
       if (!state) return false;
       const normalized = String(state).toLowerCase();
-      return normalized === "on" || normalized === "true" || normalized === "detected" || normalized === "unavailable" || normalized === "unknown";
+      // Only treat actual alarm states as triggered, not unavailable/unknown
+      return normalized === "on" || normalized === "true" || normalized === "detected";
     });
   })();
 
-  const normalizedStatus: SensorStatus = unavailable || alarmTriggered ? "critical" : status;
+  // Check if sensors are unavailable separately
+  const sensorsUnavailable = (() => {
+    const states = [
+      { id: actualEntityId, raw: actual.raw },
+      { id: minEntityId, raw: min.raw },
+      { id: maxEntityId, raw: max.raw },
+    ];
+    
+    return states.some(({ id, raw }) => {
+      if (!id) return false;
+      const state = raw?.state;
+      if (!state) return true; // No state = unavailable
+      const normalized = String(state).toLowerCase();
+      return normalized === "unavailable" || normalized === "unknown";
+    });
+  })();
+
+  const normalizedStatus: SensorStatus = alarmTriggered ? "critical" : (sensorsUnavailable || unavailable) ? "warning" : status;
 
   return {
     status: normalizedStatus,

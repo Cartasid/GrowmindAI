@@ -105,7 +105,8 @@ class GrowMindDB:
             conn.close()
 
     def _init_db(self):
-        with self._get_connection() as conn:
+        conn = self._get_connection()
+        try:
             # Inventory table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS inventory (
@@ -136,6 +137,12 @@ class GrowMindDB:
                 )
             """)
             conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Database initialization failed: {e}")
+            raise
+        finally:
+            conn.close()
 
     # --- Collection Methods ---
 
@@ -146,7 +153,14 @@ class GrowMindDB:
             cursor = conn.execute(
                 "SELECT key, value FROM collections WHERE category = ?", (category,)
             )
-            return {row["key"]: json.loads(row["value"]) for row in cursor.fetchall()}
+            result = {}
+            for row in cursor.fetchall():
+                try:
+                    result[row["key"]] = json.loads(row["value"])
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in collection {category}, key {row['key']}: {e}")
+                    result[row["key"]] = None
+            return result
 
     def set_collection(self, category: str, data: Dict[str, Any]) -> None:
         """Replace entire collection with new data."""
@@ -188,7 +202,13 @@ class GrowMindDB:
                 (category, key)
             )
             row = cursor.fetchone()
-            return json.loads(row["value"]) if row else default
+            if row:
+                try:
+                    return json.loads(row["value"])
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in collection {category}, key {key}: {e}")
+                    return default
+            return default
 
     def set_collection_key(self, category: str, key: str, value: Any) -> None:
         """Store a key-value pair with automatic JSON serialization."""
@@ -280,7 +300,13 @@ class GrowMindDB:
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
             row = cursor.fetchone()
-            return json.loads(row["value"]) if row else default
+            if row:
+                try:
+                    return json.loads(row["value"])
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in setting {key}: {e}")
+                    return default
+            return default
 
     def set_setting(self, key: str, value: Any) -> None:
         """Store or update a setting."""

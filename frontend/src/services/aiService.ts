@@ -32,10 +32,25 @@ export interface ServiceError {
 
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; error: ServiceError };
 
+// Maximum total file size: 10MB
+const MAX_TOTAL_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(((reader.result as string) || "").split(",")[1] || "");
+    reader.onload = () => {
+      const result = reader.result as string;
+      if (!result || !result.includes(',')) {
+        reject(new Error("Invalid file data"));
+        return;
+      }
+      const base64 = result.split(",")[1];
+      if (!base64) {
+        reject(new Error("Failed to extract base64 data"));
+        return;
+      }
+      resolve(base64);
+    };
     reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
@@ -75,6 +90,16 @@ export const analyzePlantImage = async (
     lang === "de" ? "Die Analyse konnte nicht abgeschlossen werden." : "Unable to complete the analysis.";
 
   try {
+    // Validate total file size before processing
+    const totalSize = imageFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > MAX_TOTAL_IMAGE_SIZE_BYTES) {
+      const message =
+        lang === "de"
+          ? `Die Gesamtgröße der Bilder (${(totalSize / 1024 / 1024).toFixed(1)}MB) überschreitet das Maximum von ${MAX_TOTAL_IMAGE_SIZE_BYTES / 1024 / 1024}MB.`
+          : `Total image size (${(totalSize / 1024 / 1024).toFixed(1)}MB) exceeds the maximum of ${MAX_TOTAL_IMAGE_SIZE_BYTES / 1024 / 1024}MB.`;
+      return { ok: false, error: createError("IMAGE_TOO_LARGE", message) };
+    }
+
     let imagesBase64: string[];
     try {
       imagesBase64 = await Promise.all(imageFiles.map(fileToBase64));
