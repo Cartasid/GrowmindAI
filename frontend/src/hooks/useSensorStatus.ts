@@ -235,8 +235,8 @@ export const useSensorStatus = ({
   const sensorsUnavailable = (() => {
     const states = [
       { id: actualEntityId, raw: actual.raw },
-      { id: minEntityId, raw: minEntity.raw },
-      { id: maxEntityId, raw: maxEntity.raw },
+      { id: minEntityId, raw: min.raw },
+      { id: maxEntityId, raw: max.raw },
     ];
     
     return states.some(({ id, raw }) => {
@@ -248,7 +248,7 @@ export const useSensorStatus = ({
     });
   })();
 
-  const normalizedStatus: SensorStatus = alarmTriggered ? "critical" : (sensorsUnavailable || unavailable) ? "error" : status;
+  const normalizedStatus: SensorStatus = alarmTriggered ? "critical" : (sensorsUnavailable || unavailable) ? "warning" : status;
 
   return {
     status: normalizedStatus,
