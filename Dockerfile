@@ -45,13 +45,13 @@ RUN pip3 install --no-cache-dir --no-warn-script-location \
 # Install Python dependencies
 COPY backend/pyproject.toml backend/requirements.txt* ./
 RUN pip3 install --no-cache-dir --no-warn-script-location \
-    "fastapi==0.109.0" \
-    "uvicorn[standard]==0.27.0" \
-    "httpx==0.26.0" \
-    "portalocker==2.8.1" \
-    "google-genai==0.3.0" \
+    "fastapi>=0.109.0" \
+    "uvicorn[standard]>=0.27.0" \
+    "httpx>=0.28.0,<0.29.0" \
+    "portalocker>=2.8.1" \
+    "google-genai>=0.3.0,<1.0.0" \
     "websockets==12.0" \
-    "pydantic>=2.0.0,<2.1.0"
+    "pydantic>=2.9.0"
 
 # Copy backend source
 COPY backend/ ./backend/
