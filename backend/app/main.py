@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 from urllib.parse import urlparse
+from copy import deepcopy
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
-from .database import InvalidIdentifierError
+from .database import InvalidIdentifierError, db
 from .logging_config import setup_secure_logging
 from .plan_routes import router as plan_router
 from .journal_routes import router as journal_router
@@ -28,6 +29,7 @@ from .nutrient_routes import router as nutrient_router
 from .websocket_routes import router as websocket_router
 from .telemetry import telemetry_worker, shutdown_worker
 from .utils import load_mapping
+from .sanitization import InputSanitizer
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 logging.getLogger().setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
@@ -211,7 +213,62 @@ class UpdatePayload(BaseModel):
     value: Any
 
 
-MAPPING = load_mapping()
+class MappingOverridePayload(BaseModel):
+    category: str
+    section: str
+    role: str
+    entity_id: str
+
+
+BASE_MAPPING = load_mapping()
+
+
+def _load_mapping_overrides() -> Dict[str, Any]:
+    raw = db.get_setting("mapping_overrides", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def _apply_mapping_overrides(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    merged = deepcopy(base)
+    for category, sections in overrides.items():
+        if category not in merged or not isinstance(sections, dict):
+            continue
+        for section in ("inputs", "targets"):
+            override_map = sections.get(section)
+            if not isinstance(override_map, dict):
+                continue
+            items = merged.get(category, {}).get(section)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                role = item.get("role")
+                if role in override_map:
+                    item["entity_id"] = override_map[role]
+    return merged
+
+
+def _set_mapping_override(payload: MappingOverridePayload) -> Dict[str, Any]:
+    overrides = _load_mapping_overrides()
+    category = InputSanitizer.sanitize_identifier(payload.category)
+    section = payload.section.strip()
+    role = InputSanitizer.sanitize_identifier(payload.role)
+    entity_id = payload.entity_id.strip()
+    if section not in {"inputs", "targets"}:
+        raise HTTPException(status_code=400, detail="Invalid mapping section")
+    if entity_id:
+        entity_id = InputSanitizer.sanitize_identifier(entity_id)
+    category_overrides = overrides.setdefault(category, {})
+    section_overrides = category_overrides.setdefault(section, {})
+    if entity_id:
+        section_overrides[role] = entity_id
+    else:
+        if role in section_overrides:
+            del section_overrides[role]
+    db.set_setting("mapping_overrides", overrides)
+    return overrides
+
+
+MAPPING = _apply_mapping_overrides(BASE_MAPPING, _load_mapping_overrides())
 
 _UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
 
@@ -551,6 +608,14 @@ async def update_configuration(payload: UpdatePayload):
         payload=service_call["payload"]
     )
 
+    return {"status": "ok"}
+
+
+@app.post("/api/config/mapping")
+async def update_mapping(payload: MappingOverridePayload) -> Dict[str, Any]:
+    global MAPPING
+    overrides = _set_mapping_override(payload)
+    MAPPING = _apply_mapping_overrides(BASE_MAPPING, overrides)
     return {"status": "ok"}
 
 

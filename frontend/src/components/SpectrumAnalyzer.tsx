@@ -61,10 +61,7 @@ export function SpectrumAnalyzer() {
   const { lightingEngine, status } = useLightingEngine();
 
   const targetEntries = Object.entries(lightingEngine.target_spectrum ?? {});
-  const hasTargets = targetEntries.some(([, rawValue]) => {
-    const value = typeof rawValue === "number" ? rawValue : Number(rawValue) || 0;
-    return Number.isFinite(value) && value > 0;
-  });
+  const hasTargets = targetEntries.some(([key]) => Boolean(TARGET_MAPPING[key]));
 
   const totalActual = useMemo(() => {
     const sum = SEGMENTS.reduce((acc, segment) => acc + (lightingEngine.current_spectrum[segment.key] || 0), 0);

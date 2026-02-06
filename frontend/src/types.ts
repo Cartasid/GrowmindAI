@@ -1,6 +1,6 @@
 export type Cultivar = 'wedding_cake' | 'blue_dream' | 'amnesia_haze';
 export type Substrate = 'coco' | 'soil' | 'rockwool';
-export type Phase = 'Seedling' | 'Vegetative' | 'Pre-flowering' | 'Flowering' | 'Post-flowering' | 'Harvesting' | 'Curing';
+export type Phase = string;
 export type Language = 'en' | 'de';
 
 export interface AnalyzerInputs {

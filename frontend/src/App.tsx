@@ -13,6 +13,7 @@ import { apiUrl } from "./api";
 import { GlassCard } from "./components/GlassCard";
 import { NutrientCalculator } from "./components/NutrientCalculator";
 import { SpectrumAnalyzer } from "./components/SpectrumAnalyzer";
+import { SensorMappingPanel } from "./components/SensorMappingPanel";
 import Journal from "./Journal";
 import { useSensorStatus } from "./hooks/useSensorStatus";
 import logo from "./assets/growmind-logo.svg";
@@ -452,6 +453,10 @@ function App() {
 
                     <motion.div variants={fadeUp}>
                       <SpectrumAnalyzer />
+                    </motion.div>
+
+                    <motion.div variants={fadeUp}>
+                      <SensorMappingPanel />
                     </motion.div>
                   </motion.div>
                 )}
