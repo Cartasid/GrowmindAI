@@ -14,6 +14,8 @@ import { GlassCard } from "./components/GlassCard";
 import { NutrientCalculator } from "./components/NutrientCalculator";
 import { SpectrumAnalyzer } from "./components/SpectrumAnalyzer";
 import { SensorMappingPanel } from "./components/SensorMappingPanel";
+import { CropSteeringPanel } from "./components/CropSteeringPanel";
+import { PlantAnalyzerPanel } from "./components/PlantAnalyzerPanel";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
 import { useSensorStatus } from "./hooks/useSensorStatus";
@@ -27,7 +29,7 @@ type Metric = {
   icon: LucideIcon;
 };
 
-type SectionKey = "overview" | "journal" | "nutrients" | "mapping";
+type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering";
 
 const climateMetrics: Metric[] = [
   {
@@ -79,6 +81,7 @@ const sidebarLinks: { key: SectionKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
   { key: "journal", label: "Journal" },
   { key: "nutrients", label: "Nährstoffrechner" },
+  { key: "steering", label: "Crop Steering" },
   { key: "mapping", label: "Sensor-Mapping" }
 ];
 
@@ -102,6 +105,11 @@ const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle
     eyebrow: "Config",
     title: "Sensor-Mapping",
     subtitle: "Entity-Zuordnung für Eingänge und Targets"
+  },
+  steering: {
+    eyebrow: "Control",
+    title: "Crop Steering",
+    subtitle: "Feinsteuerung und Hilfssensoren"
   }
 };
 
@@ -512,12 +520,20 @@ function App() {
                 )}
                 {activeSection === "journal" && (
                   <motion.div variants={fadeUp}>
-                    <Journal growId="default" lang="de" phase="Vegetative" />
+                    <div className="space-y-10">
+                      <PlantAnalyzerPanel lang="de" />
+                      <Journal growId="default" lang="de" phase="Vegetative" />
+                    </div>
                   </motion.div>
                 )}
                 {activeSection === "nutrients" && (
                   <motion.div variants={fadeUp}>
                     <NutrientCalculator />
+                  </motion.div>
+                )}
+                {activeSection === "steering" && (
+                  <motion.div variants={fadeUp}>
+                    <CropSteeringPanel />
                   </motion.div>
                 )}
                 {activeSection === "mapping" && (

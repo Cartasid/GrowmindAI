@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Plus, ChevronDown } from "lucide-react";
 
 import { useJournal } from "./hooks/useJournal";
 import { useHaEntity } from "./hooks/useHaEntity";
 import { JournalModal } from "./components/JournalModal";
+import AIJournal from "./AIJournal";
 
 const coerceDate = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -58,13 +59,113 @@ const ImageWithOverlay = ({ src, overlayText }) => {
   );
 };
 
+const GROW_STORAGE_KEY = "growmind.grows";
+const ACTIVE_GROW_KEY = "growmind.activeGrow";
+
+const loadGrows = () => {
+  if (typeof window === "undefined") return ["default"];
+  try {
+    const raw = window.localStorage.getItem(GROW_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed) && parsed.length) {
+      const cleaned = parsed
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+      return cleaned.length ? Array.from(new Set(cleaned)) : ["default"];
+    }
+  } catch {
+    return ["default"];
+  }
+  return ["default"];
+};
+
+const loadActiveGrow = (grows) => {
+  if (typeof window === "undefined") return grows[0] || "default";
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_GROW_KEY);
+    if (stored && grows.includes(stored)) return stored;
+  } catch {
+    return grows[0] || "default";
+  }
+  return grows[0] || "default";
+};
+
+const saveGrows = (grows) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(GROW_STORAGE_KEY, JSON.stringify(grows));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
+const saveActiveGrow = (growId) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ACTIVE_GROW_KEY, growId);
+  } catch {
+    // Ignore storage errors
+  }
+};
+
+const normalizeGrowId = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  return trimmed
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9_.:-]/g, "")
+    .slice(0, 128);
+};
+
 export default function Journal({ growId = "default", lang = "de", phase = "Vegetative" }) {
-  const { entries } = useJournal(growId);
+  const initialGrows = useMemo(() => loadGrows(), []);
+  const [grows, setGrows] = useState(initialGrows);
+  const [activeGrowId, setActiveGrowId] = useState(() => loadActiveGrow(initialGrows));
+  const [newGrowName, setNewGrowName] = useState("");
+  const { entries } = useJournal(activeGrowId || growId);
   const [expandedId, setExpandedId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   const growStart = useHaEntity("input_datetime.grow_start_date", 30);
   const growStartDate = useMemo(() => coerceDate(growStart.raw?.state), [growStart.raw?.state]);
+
+  useEffect(() => {
+    if (!grows.length) {
+      setGrows(["default"]);
+      setActiveGrowId("default");
+      return;
+    }
+    if (!grows.includes(activeGrowId)) {
+      setActiveGrowId(grows[0]);
+    }
+    saveGrows(grows);
+  }, [grows, activeGrowId]);
+
+  useEffect(() => {
+    if (activeGrowId) {
+      saveActiveGrow(activeGrowId);
+    }
+  }, [activeGrowId]);
+
+  const handleAddGrow = () => {
+    const normalized = normalizeGrowId(newGrowName);
+    if (!normalized) return;
+    if (!grows.includes(normalized)) {
+      setGrows((prev) => [...prev, normalized]);
+    }
+    setActiveGrowId(normalized);
+    setNewGrowName("");
+  };
+
+  const handleDeleteGrow = () => {
+    if (grows.length <= 1) return;
+    const confirmMessage =
+      lang === "de"
+        ? `Grow "${activeGrowId}" wirklich loeschen?`
+        : `Delete grow "${activeGrowId}"?`;
+    if (!window.confirm(confirmMessage)) return;
+    setGrows((prev) => prev.filter((id) => id !== activeGrowId));
+  };
 
   const sortedEntries = useMemo(() => {
     return [...(entries || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -84,6 +185,46 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
           <p className="meta-mono mt-4 text-[11px] text-white/40">
             {lang === "de" ? "Grow Start" : "Grow start"}: {growStartDate ? growStartDate.toLocaleString() : "—"}
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70">
+              {lang === "de" ? "Aktiver Grow" : "Active grow"}
+            </div>
+            <select
+              value={activeGrowId}
+              onChange={(event) => setActiveGrowId(event.target.value)}
+              className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
+            >
+              {grows.map((id) => (
+                <option key={id} value={id} className="bg-[#070a16]">
+                  {id}
+                </option>
+              ))}
+            </select>
+            {grows.length > 1 && (
+              <button
+                type="button"
+                onClick={handleDeleteGrow}
+                className="rounded-full border border-brand-red/40 px-4 py-2 text-xs text-brand-red hover:bg-brand-red/10"
+              >
+                {lang === "de" ? "Grow loeschen" : "Delete grow"}
+              </button>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <input
+              value={newGrowName}
+              onChange={(event) => setNewGrowName(event.target.value)}
+              placeholder={lang === "de" ? "Neuen Grow-ID" : "New grow id"}
+              className="w-48 rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
+            />
+            <button
+              type="button"
+              onClick={handleAddGrow}
+              className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-2 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70"
+            >
+              {lang === "de" ? "Grow anlegen" : "Add grow"}
+            </button>
+          </div>
         </div>
 
         <button
@@ -111,7 +252,10 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
         </button>
       </motion.div>
 
-      <motion.div variants={staggerContainer} className="mt-8 space-y-6">
+      <motion.div variants={staggerContainer} className="mt-8 space-y-10">
+        <motion.div variants={fadeUp}>
+          <AIJournal entries={sortedEntries} growStartDate={growStartDate?.toISOString()} title="AI JOURNAL LOG" />
+        </motion.div>
         {sortedEntries.length === 0 ? (
           <motion.div variants={fadeUp} className="glass-card rounded-3xl p-6">
             <p className="meta-mono text-[11px] text-white/50">NO ENTRIES</p>
@@ -188,7 +332,7 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
       <JournalModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        growId={growId}
+        growId={activeGrowId || growId}
         lang={lang}
         phase={phase}
       />

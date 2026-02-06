@@ -42,6 +42,7 @@ GrowMind AI is an intelligent assistant for cannabis cultivation that integrates
 ### Optional
 - **Log Level**: debug, info, warning, error (default: info)
 - **Gemini Model**: Model to use for AI analysis (default: gemini-2.5-flash)
+- **HASS Token**: Optional Home Assistant long-lived access token (fallback for API auth if Supervisor token is unavailable)
 
 ## Usage
 

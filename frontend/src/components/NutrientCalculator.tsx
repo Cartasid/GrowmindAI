@@ -453,6 +453,30 @@ export function NutrientCalculator() {
                   </div>
                 </div>
               )}
+              {selectedPlan && (
+                <div className="rounded-2xl border border-brand-purple/30 bg-brand-purple/10 px-4 py-3 text-sm text-white/70">
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">AI-Powered Plans</p>
+                  <p className="mt-2 text-white/80">
+                    AI optimiert den Wochenplan basierend auf Wasserprofil, Phase und Grow-Trends.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className="rounded-full border border-brand-purple/40 bg-brand-purple/15 px-4 py-2 text-xs text-brand-purple shadow-brand-glow hover:border-brand-purple/70"
+                      onClick={handleGenerateAiPlan}
+                      disabled={!selectedPlan || aiGenerating}
+                    >
+                      {aiGenerating ? "AI generiert…" : "AI-Plan starten"}
+                    </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={handleCreateDraft}
+                      disabled={!selectedPlan}
+                    >
+                      Plan-Editor öffnen
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

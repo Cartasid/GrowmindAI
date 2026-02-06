@@ -112,3 +112,15 @@ export const fetchHaEntities = async (): Promise<HaEntityInfo[]> => {
   entitiesCache = (await response.json()) as HaEntityInfo[];
   return entitiesCache;
 };
+
+export const updateConfigValue = async (payload: {
+  category: string;
+  role: string;
+  value: string | number | boolean | { date?: string; time?: string } | null;
+}): Promise<void> => {
+  await requestJson<{ status: string }>("/api/config/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};

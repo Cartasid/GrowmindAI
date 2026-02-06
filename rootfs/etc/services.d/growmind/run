@@ -4,9 +4,14 @@ set -euo pipefail
 export GEMINI_API_KEY="$(bashio::config 'gemini_api_key')"
 export GEMINI_MODEL="$(bashio::config 'gemini_model')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
+export HASS_TOKEN="$(bashio::config 'hass_token')"
 
 if [ -z "${GEMINI_API_KEY:-}" ]; then
   bashio::log.warning "GEMINI_API_KEY not set – AI features will be unavailable."
+fi
+
+if [ -n "${HASS_TOKEN:-}" ]; then
+  bashio::log.info "HASS_TOKEN configured via add-on options."
 fi
 
 cd /app/backend
