@@ -14,6 +14,7 @@ type MetricKey = (typeof METRICS)[number]["key"];
 type MetricPoint = {
   value: number;
   date: Date;
+  entryId: string;
 };
 
 const buildSeries = (entries: JournalEntry[], key: MetricKey) => {
@@ -24,7 +25,7 @@ const buildSeries = (entries: JournalEntry[], key: MetricKey) => {
     .forEach((entry) => {
       const value = entry.metrics?.[key];
       if (typeof value === "number" && Number.isFinite(value)) {
-        points.push({ value, date: new Date(entry.date) });
+        points.push({ value, date: new Date(entry.date), entryId: entry.id });
       }
     });
   return points;
@@ -53,11 +54,15 @@ function MetricChart({
   unit,
   color,
   points,
+  highlightEntryId,
+  onSelectEntry,
 }: {
   label: string;
   unit: string;
   color: string;
   points: MetricPoint[];
+  highlightEntryId?: string | null;
+  onSelectEntry?: (entryId: string) => void;
 }) {
   const width = 240;
   const height = 80;
@@ -84,6 +89,28 @@ function MetricChart({
   const handleLeave = () => setTooltip(null);
 
   const tooltipPoint = tooltip ? points[tooltip.index] : null;
+  const highlightIndex = highlightEntryId
+    ? points.findIndex((point) => point.entryId === highlightEntryId)
+    : -1;
+  const highlightPoint = highlightIndex >= 0 ? points[highlightIndex] : null;
+
+  const rangeValues = values.slice(-7);
+  const rangeAverage = rangeValues.length
+    ? rangeValues.reduce((sum, value) => sum + value, 0) / rangeValues.length
+    : 0;
+  const rangeVariance = rangeValues.length
+    ? rangeValues.reduce((sum, value) => sum + (value - rangeAverage) ** 2, 0) / rangeValues.length
+    : 0;
+  const rangeDeviation = Math.sqrt(rangeVariance);
+  const minBand = rangeAverage - rangeDeviation;
+  const maxBand = rangeAverage + rangeDeviation;
+  const minValue = values.length ? Math.min(...values) : 0;
+  const maxValue = values.length ? Math.max(...values) : 1;
+  const bandMin = clamp(minBand, minValue, maxValue);
+  const bandMax = clamp(maxBand, minValue, maxValue);
+  const bandRange = maxValue - minValue || 1;
+  const bandTop = height - ((bandMax - minValue) / bandRange) * height;
+  const bandBottom = height - ((bandMin - minValue) / bandRange) * height;
 
   return (
     <div className="glass-card rounded-2xl px-4 py-3">
@@ -104,16 +131,38 @@ function MetricChart({
           className="h-20 w-full"
           onMouseMove={handleMove}
           onMouseLeave={handleLeave}
+          onClick={() => {
+            if (tooltipPoint && onSelectEntry) {
+              onSelectEntry(tooltipPoint.entryId);
+            }
+          }}
         >
+          {values.length > 1 && (
+            <rect
+              x={0}
+              y={bandTop}
+              width={width}
+              height={Math.max(2, bandBottom - bandTop)}
+              fill={`${color}20`}
+            />
+          )}
           <path d={path} fill="none" stroke={color} strokeWidth="2" />
           {tooltipPoint && (
-            <circle cx={tooltip.x} cy={tooltip.y} r={3} fill={color} />
+            <circle cx={tooltip?.x ?? 0} cy={tooltip?.y ?? 0} r={3} fill={color} />
+          )}
+          {highlightPoint && !tooltipPoint && (
+            <circle
+              cx={(highlightIndex / Math.max(points.length - 1, 1)) * width}
+              cy={height - ((highlightPoint.value - minValue) / bandRange) * height}
+              r={3}
+              fill={color}
+            />
           )}
         </svg>
         {tooltipPoint && (
           <div
             className="absolute -translate-x-1/2 -translate-y-2 rounded-xl border border-white/10 bg-black/80 px-3 py-2 text-xs text-white/80"
-            style={{ left: `${(tooltip.x / width) * 100}%`, top: `${(tooltip.y / height) * 100}%` }}
+            style={{ left: `${((tooltip?.x ?? 0) / width) * 100}%`, top: `${((tooltip?.y ?? 0) / height) * 100}%` }}
           >
             <div className="text-[10px] text-white/50">{formatDate(tooltipPoint.date)}</div>
             <div className="font-semibold text-white">
@@ -126,7 +175,15 @@ function MetricChart({
   );
 }
 
-export function JournalMetricsChart({ entries }: { entries: JournalEntry[] }) {
+export function JournalMetricsChart({
+  entries,
+  highlightEntryId,
+  onSelectEntry,
+}: {
+  entries: JournalEntry[];
+  highlightEntryId?: string | null;
+  onSelectEntry?: (entryId: string) => void;
+}) {
   const series = useMemo(
     () =>
       METRICS.map((metric) => ({
@@ -154,6 +211,8 @@ export function JournalMetricsChart({ entries }: { entries: JournalEntry[] }) {
             unit={metric.unit}
             color={metric.color}
             points={metric.values}
+            highlightEntryId={highlightEntryId}
+            onSelectEntry={onSelectEntry}
           />
         ))}
       </div>

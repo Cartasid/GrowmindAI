@@ -38,7 +38,32 @@ export function PlanOptimizerModal({
   const [submitting, setSubmitting] = useState(false);
   const [waterProfile, setWaterProfile] = useState<NutrientProfile>({ ...plan.waterProfile });
   const [osmosisShare, setOsmosisShare] = useState<string>(() => (plan.osmosisShare * 100).toFixed(1));
+  const [presetId, setPresetId] = useState("default");
   const { addToast } = useToast();
+
+  const presets = useMemo(
+    () => [
+      {
+        id: "default",
+        label: `${substrate} Default`,
+        profile: { ...plan.waterProfile },
+        osmosis: (plan.osmosisShare * 100).toFixed(1),
+      },
+      {
+        id: "ro50",
+        label: "RO Mix 50%",
+        profile: { ...plan.waterProfile },
+        osmosis: "50.0",
+      },
+      {
+        id: "ro80",
+        label: "RO Mix 80%",
+        profile: { ...plan.waterProfile },
+        osmosis: "80.0",
+      },
+    ],
+    [plan.waterProfile, plan.osmosisShare, substrate]
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -46,6 +71,7 @@ export function PlanOptimizerModal({
       setSelectedNutrients(["N", "P", "K", "Ca", "Mg", "S"]);
       setWaterProfile({ ...plan.waterProfile });
       setOsmosisShare((plan.osmosisShare * 100).toFixed(1));
+      setPresetId("default");
     }
   }, [isOpen, plan]);
 
@@ -54,6 +80,7 @@ export function PlanOptimizerModal({
     setSelectedNutrients(["N", "P", "K", "Ca", "Mg", "S"]);
     setWaterProfile({ ...plan.waterProfile });
     setOsmosisShare((plan.osmosisShare * 100).toFixed(1));
+    setPresetId("default");
   };
 
   const handleClose = () => {
@@ -64,6 +91,9 @@ export function PlanOptimizerModal({
   };
 
   const updateWeek = (index: number, key: string, value: string) => {
+    const normalized = value.trim();
+    const numeric = normalized ? Number(normalized.replace(",", ".")) : null;
+    const shouldSet = numeric != null && Number.isFinite(numeric);
     setWeeks((prev) =>
       prev.map((week, idx) =>
         idx === index
@@ -71,7 +101,11 @@ export function PlanOptimizerModal({
               ...week,
               targets: {
                 ...week.targets,
-                [key]: value.trim() ? Number(value.replace(",", ".")) : undefined,
+                ...(shouldSet
+                  ? { [key]: numeric as number }
+                  : Object.fromEntries(
+                      Object.entries(week.targets).filter(([targetKey]) => targetKey !== key)
+                    )),
               },
             }
           : week
@@ -101,7 +135,9 @@ export function PlanOptimizerModal({
         lang,
         cultivar,
         substrate,
-        waterProfile,
+        Object.fromEntries(
+          Object.entries(waterProfile).filter(([, value]) => typeof value === "number")
+        ) as Record<string, number>,
         osmosisValue
       );
       if (!response.ok) {
@@ -159,6 +195,26 @@ export function PlanOptimizerModal({
         <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
             <p className="text-xs uppercase tracking-[0.3em] text-white/40">Water Profile</p>
+            <label className="mt-3 block text-xs text-white/60">
+              Preset
+              <select
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-sm text-white"
+                value={presetId}
+                onChange={(event) => {
+                  const selected = presets.find((preset) => preset.id === event.target.value);
+                  if (!selected) return;
+                  setPresetId(selected.id);
+                  setWaterProfile({ ...selected.profile });
+                  setOsmosisShare(selected.osmosis);
+                }}
+              >
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.id} className="bg-[#070a16]">
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {WATER_KEYS.map((key) => (
                 <label key={key} className="text-xs text-white/60">

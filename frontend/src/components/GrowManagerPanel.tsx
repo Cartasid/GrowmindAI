@@ -88,7 +88,23 @@ export function GrowManagerPanel({
         vwc: computeTrend(metrics.vwc),
         ec: computeTrend(metrics.ec),
       },
+      series: metrics,
     };
+  };
+
+  const buildSparkline = (values: number[], width = 80, height = 26) => {
+    if (!values.length) return "";
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    return values
+      .slice(-12)
+      .map((value, index, arr) => {
+        const x = (index / Math.max(arr.length - 1, 1)) * width;
+        const y = height - ((value - min) / range) * height;
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+      })
+      .join(" ");
   };
 
   const handleCreate = () => {
@@ -293,6 +309,9 @@ export function GrowManagerPanel({
                   </p>
                   {(() => {
                     const stats = buildStats(grow.id);
+                    const vpdPath = buildSparkline(stats.series.vpd);
+                    const vwcPath = buildSparkline(stats.series.vwc);
+                    const ecPath = buildSparkline(stats.series.ec);
                     return (
                       <div className="mt-3 space-y-2 text-xs text-white/60">
                         <div>Entries: {stats.count}</div>
@@ -310,6 +329,26 @@ export function GrowManagerPanel({
                             EC {stats.averages.ec != null ? stats.averages.ec.toFixed(2) : "—"}
                             {stats.trends.ec === "up" ? " ^" : stats.trends.ec === "down" ? " v" : " ->"}
                           </span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-1">
+                            <p className="text-[10px] text-white/40">VPD</p>
+                            <svg viewBox="0 0 80 26" className="h-6 w-full">
+                              <path d={vpdPath} fill="none" stroke="#6C5BFF" strokeWidth="2" />
+                            </svg>
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-1">
+                            <p className="text-[10px] text-white/40">VWC</p>
+                            <svg viewBox="0 0 80 26" className="h-6 w-full">
+                              <path d={vwcPath} fill="none" stroke="#2FE6FF" strokeWidth="2" />
+                            </svg>
+                          </div>
+                          <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-1">
+                            <p className="text-[10px] text-white/40">EC</p>
+                            <svg viewBox="0 0 80 26" className="h-6 w-full">
+                              <path d={ecPath} fill="none" stroke="#FF8A3D" strokeWidth="2" />
+                            </svg>
+                          </div>
                         </div>
                       </div>
                     );

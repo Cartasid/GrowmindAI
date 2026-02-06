@@ -275,7 +275,11 @@ export default function Journal({
           <GrowthTimeline entries={sortedEntries} onSelect={(entry) => setExpandedId(entry.id)} />
         </motion.div>
         <motion.div variants={fadeUp}>
-          <JournalMetricsChart entries={sortedEntries} />
+          <JournalMetricsChart
+            entries={sortedEntries}
+            highlightEntryId={expandedId}
+            onSelectEntry={(entryId) => setExpandedId(entryId)}
+          />
         </motion.div>
         <motion.div variants={fadeUp}>
           <PhotoGallery entries={sortedEntries} onSelect={(entry) => setExpandedId(entry.id)} />
