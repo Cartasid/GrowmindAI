@@ -1,0 +1,18 @@
+[project]
+name = "cultivation-os-backend"
+version = "0.1.0"
+description = "FastAPI bridge between Cultivation OS frontend and Home Assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi~=0.109",
+    "uvicorn[standard]~=0.27",
+    "httpx~=0.26",
+    "portalocker~=2.8",
+    "google-genai~=0.3"
+]
+
+[tool.uvicorn]
+app = "app.main:app"
+host = "0.0.0.0"
+port = 8000
+reload = false
