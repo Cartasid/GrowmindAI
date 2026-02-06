@@ -1,4 +1,4 @@
-ARG BUILD_FROM
+ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:latest
 
 # ---------- Stage 1: Frontend builder ----------
 FROM node:20-alpine AS frontend-builder
@@ -19,10 +19,10 @@ FROM ${BUILD_FROM} AS runtime
 
 # Install Python and essential tools
 RUN apk add --no-cache \
-    python3=3.11.8-r1 \
-    py3-pip=23.3.1-r0 \
-    bash=5.2.21-r0 \
-    wget=1.21.4-r0 && \
+    python3 \
+    py3-pip \
+    bash \
+    wget && \
     ln -sf python3 /usr/bin/python
 
 WORKDIR /app
