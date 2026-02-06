@@ -1,0 +1,7 @@
+{
+  "name": "PhotonFlux Nutrients Calculator",
+  "description": "A React-based 3-part nutrient calculator for plant cultivation, allowing users to calculate precise dosing based on growth phase, substrate, and plant feedback. Includes features for plan customization, import/export, and multi-language support.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

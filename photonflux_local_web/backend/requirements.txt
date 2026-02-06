@@ -1,0 +1,8 @@
+fastapi==0.114.2
+uvicorn==0.30.6
+python-dotenv==1.0.1
+pydantic==2.9.2
+python-multipart==0.0.9
+google-genai==1.32.0
+portalocker==3.2.0
+requests

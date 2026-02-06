@@ -1,0 +1,323 @@
+{
+  "system_info": {
+    "label": "System Status",
+    "inputs": [
+      {
+        "role": "growth_phase",
+        "label": "Growth Phase",
+        "entity_id": "input_select.cannabis_growth_phase",
+        "type": "input_select"
+      },
+      {
+        "role": "steering_week",
+        "label": "Steering Week",
+        "entity_id": "input_select.crop_steering_week",
+        "type": "input_select"
+      },
+      {
+        "role": "day_counter",
+        "label": "Day Counter",
+        "entity_id": "input_number.crop_day_counter",
+        "type": "input_number"
+      },
+      {
+        "role": "grow_start_date",
+        "label": "Grow Start",
+        "entity_id": "input_datetime.grow_start_date",
+        "type": "input_datetime"
+      }
+    ],
+    "targets": [
+      {
+        "role": "phase_duration",
+        "label": "Phase Duration",
+        "entity_id": "sensor.crop_phase_duration",
+        "unit": "days"
+      }
+    ]
+  },
+  "climate_targets": {
+    "label": "Climate Targets",
+    "targets": [
+      {
+        "role": "vpd_day_min",
+        "label": "VPD Day Min",
+        "entity_id": "sensor.grow_vpd_day_min",
+        "unit": "kPa"
+      },
+      {
+        "role": "vpd_day_max",
+        "label": "VPD Day Max",
+        "entity_id": "sensor.grow_vpd_day_max",
+        "unit": "kPa"
+      },
+      {
+        "role": "temp_day_min",
+        "label": "Temp Day Min",
+        "entity_id": "sensor.grow_temperature_day_min",
+        "unit": "°C"
+      },
+      {
+        "role": "temp_day_max",
+        "label": "Temp Day Max",
+        "entity_id": "sensor.grow_temperature_day_max",
+        "unit": "°C"
+      },
+      {
+        "role": "hum_day_min",
+        "label": "Humidity Day Min",
+        "entity_id": "sensor.grow_humidity_day_min",
+        "unit": "%"
+      },
+      {
+        "role": "hum_day_max",
+        "label": "Humidity Day Max",
+        "entity_id": "sensor.grow_humidity_day_max",
+        "unit": "%"
+      }
+    ]
+  },
+  "substrate_targets": {
+    "label": "Substrate Targets",
+    "targets": [
+      {
+        "role": "vwc_day_min",
+        "label": "VWC Day Min",
+        "entity_id": "sensor.grow_vwc_day_min",
+        "unit": "%"
+      },
+      {
+        "role": "vwc_day_max",
+        "label": "VWC Day Max",
+        "entity_id": "sensor.grow_vwc_day_max",
+        "unit": "%"
+      },
+      {
+        "role": "ecp_day_min",
+        "label": "ECp Day Min",
+        "entity_id": "sensor.grow_ecp_day_min",
+        "unit": "mS/cm"
+      },
+      {
+        "role": "ecp_day_max",
+        "label": "ECp Day Max",
+        "entity_id": "sensor.grow_ecp_day_max",
+        "unit": "mS/cm"
+      }
+    ]
+  },
+  "system_alerts": {
+    "label": "System Alerts",
+    "targets": [
+      {
+        "role": "leak_detected",
+        "label": "Leakage Detected",
+        "entity_id": "binary_sensor.grow_leak_detected"
+      },
+      {
+        "role": "pump_dry",
+        "label": "Pump Dry Run",
+        "entity_id": "binary_sensor.grow_pump_dry"
+      },
+      {
+        "role": "sensor_fault",
+        "label": "Sensor Fault",
+        "entity_id": "binary_sensor.grow_sensor_fault"
+      }
+    ]
+  },
+  "live_sensors": {
+    "label": "Live Sensors",
+    "targets": [
+      {
+        "role": "actual_vpd",
+        "label": "Leaf VPD",
+        "entity_id": "sensor.growsensor_blatt_vpd",
+        "unit": "kPa"
+      },
+      {
+        "role": "actual_temp",
+        "label": "Air Temperature",
+        "entity_id": "sensor.growsensor_temperatur",
+        "unit": "°C"
+      },
+      {
+        "role": "actual_humidity",
+        "label": "Humidity",
+        "entity_id": "sensor.growsensor_luftfeuchtigkeit",
+        "unit": "%"
+      },
+      {
+        "role": "actual_co2",
+        "label": "CO₂",
+        "entity_id": "sensor.growsensor_co2",
+        "unit": "ppm"
+      },
+      {
+        "role": "actual_vwc",
+        "label": "Substrate VWC",
+        "entity_id": "sensor.growsensor_bodenfeuchte_berechnet_vwc",
+        "unit": "%"
+      },
+      {
+        "role": "actual_ecp",
+        "label": "Pore Water EC",
+        "entity_id": "sensor.growsensor_porenwasser_ec_berechnet_ecp",
+        "unit": "mS/cm"
+      }
+    ]
+  },
+  "lighting_spectrum": {
+    "label": "Lighting Spectrum",
+    "inputs": [
+      {
+        "role": "autopilot",
+        "label": "LED Autopilot",
+        "entity_id": "input_boolean.led_autopilot_enabled",
+        "type": "input_boolean"
+      }
+    ],
+    "targets": [
+      {
+        "role": "blue",
+        "label": "Blue Output",
+        "entity_id": "sensor.crop_blau_licht",
+        "unit": "%"
+      },
+      {
+        "role": "red",
+        "label": "Red Output",
+        "entity_id": "sensor.crop_rot_licht",
+        "unit": "%"
+      },
+      {
+        "role": "far_red",
+        "label": "Far Red Output",
+        "entity_id": "sensor.crop_far_red_licht",
+        "unit": "%"
+      },
+      {
+        "role": "uva",
+        "label": "UVA Hours",
+        "entity_id": "sensor.crop_uva_lichtstunden",
+        "unit": "h"
+      },
+      {
+        "role": "flower_boost",
+        "label": "Flower Boost",
+        "entity_id": "sensor.crop_flower_boost_licht",
+        "unit": "%"
+      }
+    ]
+  },
+  "crop_steering": {
+    "label": "Crop Steering",
+    "inputs": [
+      {
+        "role": "p0_duration",
+        "label": "P0 Duration",
+        "entity_id": "input_number.crop_p0",
+        "type": "input_number",
+        "unit": "min"
+      },
+      {
+        "role": "drain_target",
+        "label": "Drain Target",
+        "entity_id": "input_number.crop_drain_percent",
+        "type": "input_number",
+        "unit": "%"
+      },
+      {
+        "role": "dryback_night",
+        "label": "Night Dryback",
+        "entity_id": "input_number.crop_dryback_night",
+        "type": "input_number",
+        "unit": "%"
+      },
+      {
+        "role": "dryback_day",
+        "label": "Day Dryback",
+        "entity_id": "input_number.crop_dryback_day",
+        "type": "input_number",
+        "unit": "%"
+      },
+      {
+        "role": "irrigation_amount",
+        "label": "Irrigation Amount",
+        "entity_id": "input_number.crop_irrigation_amount",
+        "type": "input_number",
+        "unit": "ml"
+      }
+    ]
+  },
+  "inventory": {
+    "nutrients": {
+      "part_a": {
+        "name": "Core (Part A)",
+        "unit": "g",
+        "full_size": 1500,
+        "threshold_warn": 250,
+        "role": "base",
+        "description": "Basis-Versorgung (N+Ca). 1.5kg Big Pack."
+      },
+      "part_b": {
+        "name": "Vector (Part B)",
+        "unit": "g",
+        "full_size": 250,
+        "threshold_warn": 50,
+        "role": "veg_base",
+        "description": "Veg & Early Flower Basis."
+      },
+      "part_c": {
+        "name": "Pulse (Part C)",
+        "unit": "g",
+        "full_size": 500,
+        "threshold_warn": 100,
+        "role": "bloom_base",
+        "description": "Bloom Basis (N-frei)."
+      },
+      "burst": {
+        "name": "Burst (PK)",
+        "unit": "g",
+        "full_size": 250,
+        "threshold_warn": 50,
+        "role": "booster",
+        "description": "PK-Booster (Late Flower)."
+      }
+    },
+    "additives": {
+      "shield": {
+        "name": "Shield (Silica)",
+        "unit": "g",
+        "full_size": 100,
+        "threshold_warn": 10,
+        "role": "structure",
+        "description": "Silikat (Top Dress, 4g/Pflanze in W1). One-Shot."
+      },
+      "kelp": {
+        "name": "Coast (Kelp)",
+        "unit": "g",
+        "full_size": 100,
+        "threshold_warn": 20,
+        "role": "stress",
+        "description": "Stress-Schutz (Pulver)."
+      },
+      "amino": {
+        "name": "Vitality (Amino)",
+        "unit": "ml",
+        "full_size": 250,
+        "threshold_warn": 40,
+        "role": "vitality",
+        "description": "Bio-Booster (Liquid)."
+      },
+      "fulvic": {
+        "name": "Humic (Fulvic)",
+        "unit": "ml",
+        "full_size": 250,
+        "threshold_warn": 40,
+        "role": "uptake",
+        "description": "Aufnahme-Booster (Liquid)."
+      }
+    }
+  }
+}
