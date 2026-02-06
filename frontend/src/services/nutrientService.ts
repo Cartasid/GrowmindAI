@@ -89,3 +89,14 @@ export const confirmNutrientMix = async (payload: MixRequest): Promise<MixConfir
     body: JSON.stringify(payload),
   });
 };
+
+export const consumeInventory = async (payload: {
+  consumption: Record<string, number>;
+  substrate?: Substrate;
+}): Promise<InventoryResponse> => {
+  return requestJson<InventoryResponse>("/api/nutrients/inventory/consume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};

@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import type { JournalEntry } from "../types";
 
 const METRICS = [
@@ -10,15 +11,20 @@ const METRICS = [
 
 type MetricKey = (typeof METRICS)[number]["key"];
 
+type MetricPoint = {
+  value: number;
+  date: Date;
+};
+
 const buildSeries = (entries: JournalEntry[], key: MetricKey) => {
-  const points: number[] = [];
+  const points: MetricPoint[] = [];
   entries
     .slice()
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .forEach((entry) => {
       const value = entry.metrics?.[key];
       if (typeof value === "number" && Number.isFinite(value)) {
-        points.push(value);
+        points.push({ value, date: new Date(entry.date) });
       }
     });
   return points;
@@ -37,6 +43,88 @@ const buildPath = (values: number[], width: number, height: number) => {
     })
     .join(" ");
 };
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const formatDate = (date: Date) => date.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+
+function MetricChart({
+  label,
+  unit,
+  color,
+  points,
+}: {
+  label: string;
+  unit: string;
+  color: string;
+  points: MetricPoint[];
+}) {
+  const width = 240;
+  const height = 80;
+  const values = points.map((point) => point.value);
+  const path = buildPath(values, width, height);
+  const latest = values.length ? values[values.length - 1] : null;
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [tooltip, setTooltip] = useState<{ index: number; x: number; y: number } | null>(null);
+
+  const handleMove = (event: MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current || points.length === 0) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = clamp(event.clientX - rect.left, 0, rect.width);
+    const index = Math.round((x / rect.width) * Math.max(points.length - 1, 1));
+    const normalizedX = (index / Math.max(points.length - 1, 1)) * width;
+    const value = points[index]?.value ?? 0;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const normalizedY = height - ((value - min) / range) * height;
+    setTooltip({ index, x: normalizedX, y: normalizedY });
+  };
+
+  const handleLeave = () => setTooltip(null);
+
+  const tooltipPoint = tooltip ? points[tooltip.index] : null;
+
+  return (
+    <div className="glass-card rounded-2xl px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/40">{label}</p>
+          <p className="mt-1 text-lg text-white">
+            {latest != null ? latest.toFixed(2) : "—"} {unit}
+          </p>
+        </div>
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      </div>
+      <div className="mt-3 relative">
+        <svg
+          ref={svgRef}
+          width="100%"
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-20 w-full"
+          onMouseMove={handleMove}
+          onMouseLeave={handleLeave}
+        >
+          <path d={path} fill="none" stroke={color} strokeWidth="2" />
+          {tooltipPoint && (
+            <circle cx={tooltip.x} cy={tooltip.y} r={3} fill={color} />
+          )}
+        </svg>
+        {tooltipPoint && (
+          <div
+            className="absolute -translate-x-1/2 -translate-y-2 rounded-xl border border-white/10 bg-black/80 px-3 py-2 text-xs text-white/80"
+            style={{ left: `${(tooltip.x / width) * 100}%`, top: `${(tooltip.y / height) * 100}%` }}
+          >
+            <div className="text-[10px] text-white/50">{formatDate(tooltipPoint.date)}</div>
+            <div className="font-semibold text-white">
+              {tooltipPoint.value.toFixed(2)} {unit}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function JournalMetricsChart({ entries }: { entries: JournalEntry[] }) {
   const series = useMemo(
@@ -59,30 +147,15 @@ export function JournalMetricsChart({ entries }: { entries: JournalEntry[] }) {
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {series.map((metric) => {
-          const width = 240;
-          const height = 80;
-          const path = buildPath(metric.values, width, height);
-          const latest = metric.values.length ? metric.values[metric.values.length - 1] : null;
-          return (
-            <div key={metric.key} className="glass-card rounded-2xl px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">{metric.label}</p>
-                  <p className="mt-1 text-lg text-white">
-                    {latest != null ? latest.toFixed(2) : "—"} {metric.unit}
-                  </p>
-                </div>
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: metric.color }} />
-              </div>
-              <div className="mt-3">
-                <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="h-20 w-full">
-                  <path d={path} fill="none" stroke={metric.color} strokeWidth="2" />
-                </svg>
-              </div>
-            </div>
-          );
-        })}
+        {series.map((metric) => (
+          <MetricChart
+            key={metric.key}
+            label={metric.label}
+            unit={metric.unit}
+            color={metric.color}
+            points={metric.values}
+          />
+        ))}
       </div>
     </section>
   );

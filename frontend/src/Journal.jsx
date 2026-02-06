@@ -120,12 +120,18 @@ const normalizeGrowId = (value) => {
     .slice(0, 128);
 };
 
-export default function Journal({ growId = "default", lang = "de", phase = "Vegetative" }) {
+export default function Journal({
+  growId = "default",
+  lang = "de",
+  phase = "Vegetative",
+  useInternalGrowManager = true,
+}) {
   const initialGrows = useMemo(() => loadGrows(), []);
   const [grows, setGrows] = useState(initialGrows);
   const [activeGrowId, setActiveGrowId] = useState(() => loadActiveGrow(initialGrows));
   const [newGrowName, setNewGrowName] = useState("");
-  const { entries } = useJournal(activeGrowId || growId);
+  const effectiveGrowId = useInternalGrowManager ? activeGrowId || growId : growId;
+  const { entries } = useJournal(effectiveGrowId || growId);
   const [expandedId, setExpandedId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -133,6 +139,7 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
   const growStartDate = useMemo(() => coerceDate(growStart.raw?.state), [growStart.raw?.state]);
 
   useEffect(() => {
+    if (!useInternalGrowManager) return;
     if (!grows.length) {
       setGrows(["default"]);
       setActiveGrowId("default");
@@ -142,13 +149,14 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
       setActiveGrowId(grows[0]);
     }
     saveGrows(grows);
-  }, [grows, activeGrowId]);
+  }, [grows, activeGrowId, useInternalGrowManager]);
 
   useEffect(() => {
+    if (!useInternalGrowManager) return;
     if (activeGrowId) {
       saveActiveGrow(activeGrowId);
     }
-  }, [activeGrowId]);
+  }, [activeGrowId, useInternalGrowManager]);
 
   const handleAddGrow = () => {
     const normalized = normalizeGrowId(newGrowName);
@@ -188,46 +196,50 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
           <p className="meta-mono mt-4 text-[11px] text-white/40">
             {lang === "de" ? "Grow Start" : "Grow start"}: {growStartDate ? growStartDate.toLocaleString() : "—"}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70">
-              {lang === "de" ? "Aktiver Grow" : "Active grow"}
-            </div>
-            <select
-              value={activeGrowId}
-              onChange={(event) => setActiveGrowId(event.target.value)}
-              className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
-            >
-              {grows.map((id) => (
-                <option key={id} value={id} className="bg-[#070a16]">
-                  {id}
-                </option>
-              ))}
-            </select>
-            {grows.length > 1 && (
-              <button
-                type="button"
-                onClick={handleDeleteGrow}
-                className="rounded-full border border-brand-red/40 px-4 py-2 text-xs text-brand-red hover:bg-brand-red/10"
-              >
-                {lang === "de" ? "Grow loeschen" : "Delete grow"}
-              </button>
-            )}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <input
-              value={newGrowName}
-              onChange={(event) => setNewGrowName(event.target.value)}
-              placeholder={lang === "de" ? "Neuen Grow-ID" : "New grow id"}
-              className="w-48 rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
-            />
-            <button
-              type="button"
-              onClick={handleAddGrow}
-              className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-2 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70"
-            >
-              {lang === "de" ? "Grow anlegen" : "Add grow"}
-            </button>
-          </div>
+          {useInternalGrowManager && (
+            <>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70">
+                  {lang === "de" ? "Aktiver Grow" : "Active grow"}
+                </div>
+                <select
+                  value={activeGrowId}
+                  onChange={(event) => setActiveGrowId(event.target.value)}
+                  className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
+                >
+                  {grows.map((id) => (
+                    <option key={id} value={id} className="bg-[#070a16]">
+                      {id}
+                    </option>
+                  ))}
+                </select>
+                {grows.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteGrow}
+                    className="rounded-full border border-brand-red/40 px-4 py-2 text-xs text-brand-red hover:bg-brand-red/10"
+                  >
+                    {lang === "de" ? "Grow loeschen" : "Delete grow"}
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <input
+                  value={newGrowName}
+                  onChange={(event) => setNewGrowName(event.target.value)}
+                  placeholder={lang === "de" ? "Neuen Grow-ID" : "New grow id"}
+                  className="w-48 rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddGrow}
+                  className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-2 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70"
+                >
+                  {lang === "de" ? "Grow anlegen" : "Add grow"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <button
@@ -344,7 +356,7 @@ export default function Journal({ growId = "default", lang = "de", phase = "Vege
       <JournalModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        growId={activeGrowId || growId}
+        growId={effectiveGrowId || growId}
         lang={lang}
         phase={phase}
       />

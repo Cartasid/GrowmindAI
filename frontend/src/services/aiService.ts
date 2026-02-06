@@ -377,6 +377,57 @@ export const optimizePlan = async (
   }
 };
 
+export type PlanOptimizerWeekInput = {
+  phase: string;
+  stage: string;
+  targets: Record<string, number>;
+};
+
+export const optimizePlanWithTargets = async (
+  weeks: PlanOptimizerWeekInput[],
+  lang: Language,
+  cultivar?: string,
+  substrate?: string,
+  waterProfile?: Record<string, number>,
+  osmosisShare?: number
+): Promise<ServiceResult<PlanOptimizationResponse>> => {
+  try {
+    const response = await fetch(apiUrl("/api/gemini/optimize-plan"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weeks,
+        lang,
+        cultivar,
+        substrate,
+        waterProfile,
+        osmosisShare,
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      return {
+        ok: false,
+        error: createError("PROXY_ERROR", "Plan optimization failed", details, response.status),
+      };
+    }
+
+    const data = await response.json();
+    if (!data || typeof data !== "object" || !Array.isArray((data as any).plan)) {
+      return {
+        ok: false,
+        error: createError("INVALID_RESPONSE", "Unexpected optimization payload", formatDetails(data)),
+      };
+    }
+
+    return { ok: true, data: data as PlanOptimizationResponse };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: createError("UNEXPECTED_ERROR", "Optimization failed", message) };
+  }
+};
+
 export const analyzeText = async (text: string): Promise<ServiceResult<{ result: string }>> => {
   try {
     const response = await fetch(apiUrl("/api/gemini/analyze-text"), {

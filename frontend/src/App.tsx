@@ -16,6 +16,8 @@ import { SpectrumAnalyzer } from "./components/SpectrumAnalyzer";
 import { SensorMappingPanel } from "./components/SensorMappingPanel";
 import { CropSteeringPanel } from "./components/CropSteeringPanel";
 import { PlantAnalyzerPanel } from "./components/PlantAnalyzerPanel";
+import { GrowManagerPanel } from "./components/GrowManagerPanel";
+import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
 import { useSensorStatus } from "./hooks/useSensorStatus";
@@ -29,7 +31,7 @@ type Metric = {
   icon: LucideIcon;
 };
 
-type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering";
+type SectionKey = "overview" | "journal" | "nutrients" | "mapping" | "steering" | "grows";
 
 const climateMetrics: Metric[] = [
   {
@@ -79,6 +81,7 @@ const substrateMetrics: Metric[] = [
 
 const sidebarLinks: { key: SectionKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
+  { key: "grows", label: "Grows" },
   { key: "journal", label: "Journal" },
   { key: "nutrients", label: "Nährstoffrechner" },
   { key: "steering", label: "Crop Steering" },
@@ -110,6 +113,11 @@ const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle
     eyebrow: "Control",
     title: "Crop Steering",
     subtitle: "Feinsteuerung und Hilfssensoren"
+  },
+  grows: {
+    eyebrow: "Lifecycle",
+    title: "Grow Manager",
+    subtitle: "Mehrere Runs planen und vergleichen"
   }
 };
 
@@ -159,6 +167,7 @@ function App() {
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [telemetrySaving, setTelemetrySaving] = useState(false);
+  const [activeGrowId, setActiveGrow] = useState("default");
   const { addToast } = useToast();
 
   const activeMeta = sectionMeta[activeSection];
@@ -181,6 +190,19 @@ function App() {
     };
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
+  }, []);
+
+  useEffect(() => {
+    const stored = getActiveGrowId();
+    if (stored) {
+      setActiveGrow(stored);
+    } else {
+      const grows = getGrows();
+      if (grows[0]?.id) {
+        setActiveGrow(grows[0].id);
+        setActiveGrowId(grows[0].id);
+      }
+    }
   }, []);
 
   const alarmRoles = ["leak_detected", "pump_dry", "sensor_fault"];
@@ -522,7 +544,7 @@ function App() {
                   <motion.div variants={fadeUp}>
                     <div className="space-y-10">
                       <PlantAnalyzerPanel lang="de" />
-                      <Journal growId="default" lang="de" phase="Vegetative" />
+                      <Journal growId={activeGrowId} lang="de" phase="Vegetative" useInternalGrowManager={false} />
                     </div>
                   </motion.div>
                 )}
@@ -534,6 +556,17 @@ function App() {
                 {activeSection === "steering" && (
                   <motion.div variants={fadeUp}>
                     <CropSteeringPanel />
+                  </motion.div>
+                )}
+                {activeSection === "grows" && (
+                  <motion.div variants={fadeUp}>
+                    <GrowManagerPanel
+                      activeGrowId={activeGrowId}
+                      onSelect={(growId) => {
+                        setActiveGrow(growId);
+                        setActiveGrowId(growId);
+                      }}
+                    />
                   </motion.div>
                 )}
                 {activeSection === "mapping" && (

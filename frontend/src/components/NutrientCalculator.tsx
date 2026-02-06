@@ -7,12 +7,14 @@ import {
   fetchInventory,
   fetchNutrientPlan,
   confirmNutrientMix,
+  consumeInventory,
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
 import { optimizePlan } from "../services/aiService";
 import { createPlan, fetchActivePlan, fetchAvailablePlans, setActivePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
+import { PlanOptimizerModal } from "./PlanOptimizerModal";
 
 const CULTIVARS: { value: Cultivar; label: string }[] = [
   { value: "wedding_cake", label: "Wedding Cake" },
@@ -85,6 +87,8 @@ export function NutrientCalculator() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -319,6 +323,24 @@ export function NutrientCalculator() {
     }
   };
 
+  const handleInventoryConsume = async (key: string) => {
+    const raw = inventoryInput[key] ?? "";
+    const value = Number(raw.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) {
+      addToast({ title: "Ungueltige Menge", description: "Bitte eine Zahl > 0 eingeben.", variant: "error" });
+      return;
+    }
+    try {
+      const response = await consumeInventory({ consumption: { [key]: value } });
+      setInventory(response);
+      setInventoryInput((prev) => ({ ...prev, [key]: "" }));
+      addToast({ title: "Verbrauch gebucht", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Verbrauch fehlgeschlagen", description: message, variant: "error" });
+    }
+  };
+
   const handlePlanSave = async () => {
     if (!editorPlan) return;
     if (!editorPlan.name.trim()) {
@@ -491,6 +513,13 @@ export function NutrientCalculator() {
                       disabled={!selectedPlan || aiGenerating}
                     >
                       {aiGenerating ? "AI generiert…" : "AI-Plan generieren"}
+                    </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={() => setOptimizerOpen(true)}
+                      disabled={!selectedPlan}
+                    >
+                      Plan optimieren
                     </button>
                   </div>
                 </div>
@@ -674,6 +703,25 @@ export function NutrientCalculator() {
                         <span className="ml-2 text-xs text-white/40">/ {item.full_size.toFixed(1)} {item.unit}</span>
                       </p>
                       {item.description && <p className="mt-1 text-xs text-white/50">{item.description}</p>}
+                      <div className="mt-3 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.1}
+                          value={inventoryInput[key] ?? ""}
+                          onChange={(event: ValueEvent) =>
+                            setInventoryInput((prev) => ({ ...prev, [key]: event.target.value }))
+                          }
+                          className="w-24 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-sm text-white"
+                          placeholder="Verbrauch"
+                        />
+                        <button
+                          className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-white/70 hover:border-brand-cyan/40"
+                          onClick={() => handleInventoryConsume(key)}
+                        >
+                          Buchen
+                        </button>
+                      </div>
                     </div>
                   )
                 )}
@@ -911,6 +959,29 @@ export function NutrientCalculator() {
             </div>
           </div>
         </div>
+      )}
+
+      {optimizerOpen && selectedPlan && (
+        <PlanOptimizerModal
+          isOpen={optimizerOpen}
+          onClose={() => setOptimizerOpen(false)}
+          plan={selectedPlan}
+          lang="de"
+          cultivar={cultivar}
+          substrate={substrate}
+          onApply={(response) => {
+            const aiPlanEntries = mergeAiSuggestions(selectedPlan.plan, response.plan);
+            const draft = buildDraftFromPlan(selectedPlan, {
+              name: `AI Plan ${selectedPlan.name}`,
+              description: response.summary ?? "AI-generierter Plan basierend auf Targets.",
+              plan: aiPlanEntries,
+            });
+            setEditorPlan(draft);
+            setAiSummary(response.summary ?? null);
+            setShowEditor(true);
+            setOptimizerOpen(false);
+          }}
+        />
       )}
     </motion.section>
   );
