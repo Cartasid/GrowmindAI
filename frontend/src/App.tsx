@@ -26,7 +26,7 @@ type Metric = {
   icon: LucideIcon;
 };
 
-type SectionKey = "overview" | "journal" | "nutrients";
+type SectionKey = "overview" | "journal" | "nutrients" | "mapping";
 
 const climateMetrics: Metric[] = [
   {
@@ -77,7 +77,8 @@ const substrateMetrics: Metric[] = [
 const sidebarLinks: { key: SectionKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
   { key: "journal", label: "Journal" },
-  { key: "nutrients", label: "Nährstoffrechner" }
+  { key: "nutrients", label: "Nährstoffrechner" },
+  { key: "mapping", label: "Sensor-Mapping" }
 ];
 
 const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle: string }> = {
@@ -95,6 +96,11 @@ const sectionMeta: Record<SectionKey, { eyebrow: string; title: string; subtitle
     eyebrow: "Feed Lab",
     title: "Nährstoffrechner",
     subtitle: "PhotonFlux-Doser mit Plan- und Wasserprofilen"
+  },
+  mapping: {
+    eyebrow: "Config",
+    title: "Sensor-Mapping",
+    subtitle: "Entity-Zuordnung für Eingänge und Targets"
   }
 };
 
@@ -455,9 +461,6 @@ function App() {
                       <SpectrumAnalyzer />
                     </motion.div>
 
-                    <motion.div variants={fadeUp}>
-                      <SensorMappingPanel />
-                    </motion.div>
                   </motion.div>
                 )}
                 {activeSection === "journal" && (
@@ -468,6 +471,11 @@ function App() {
                 {activeSection === "nutrients" && (
                   <motion.div variants={fadeUp}>
                     <NutrientCalculator />
+                  </motion.div>
+                )}
+                {activeSection === "mapping" && (
+                  <motion.div variants={fadeUp}>
+                    <SensorMappingPanel />
                   </motion.div>
                 )}
               </motion.div>
