@@ -299,7 +299,7 @@ export function GrowManagerPanel({
         <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
           <p className="meta-mono text-[11px] text-white/50">Vergleich</p>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/50">
-            <span>Trend: ^ steigt · v faellt · -> stabil</span>
+            <span>Trend: ^ steigt · v faellt · {"->"} stabil</span>
             <span>Farben: VPD lila · VWC cyan · EC orange</span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
