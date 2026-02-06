@@ -339,7 +339,7 @@ export function NutrientCalculator() {
     setAiSummary(null);
     setAiInsights(null);
     try {
-      const waterProfile = { ...selectedPlan.waterProfile } as Record<string, number>;
+      const waterProfile = (selectedPlan.waterProfile ? { ...selectedPlan.waterProfile } : {}) as Record<string, number>;
       const response = await optimizePlan(
         selectedPlan.plan,
         "de",
@@ -349,7 +349,7 @@ export function NutrientCalculator() {
         selectedPlan.osmosisShare
       );
       if (!response.ok) {
-        throw new Error(response.error.message);
+        throw new Error(response.error.details ?? response.error.message);
       }
       const aiPlanEntries = mergeAiSuggestions(selectedPlan.plan, response.data.plan);
       const draft = buildDraftFromPlan(selectedPlan, {

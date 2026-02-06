@@ -17,6 +17,15 @@ const buildWeeks = (plan: ManagedPlan): PlanOptimizerWeekInput[] =>
     targets: {},
   }));
 
+const buildWaterProfile = (plan: ManagedPlan): NutrientProfile => ({
+  ...(plan.waterProfile ?? {}),
+});
+
+const formatOsmosis = (value: number | undefined) => {
+  const numeric = Number.isFinite(value) ? (value as number) : 0;
+  return (numeric * 100).toFixed(1);
+};
+
 export function PlanOptimizerModal({
   isOpen,
   onClose,
@@ -37,8 +46,8 @@ export function PlanOptimizerModal({
   const [weeks, setWeeks] = useState<PlanOptimizerWeekInput[]>(() => buildWeeks(plan));
   const [selectedNutrients, setSelectedNutrients] = useState<string[]>(["N", "P", "K", "Ca", "Mg", "S"]);
   const [submitting, setSubmitting] = useState(false);
-  const [waterProfile, setWaterProfile] = useState<NutrientProfile>({ ...plan.waterProfile });
-  const [osmosisShare, setOsmosisShare] = useState<string>(() => (plan.osmosisShare * 100).toFixed(1));
+  const [waterProfile, setWaterProfile] = useState<NutrientProfile>(() => buildWaterProfile(plan));
+  const [osmosisShare, setOsmosisShare] = useState<string>(() => formatOsmosis(plan.osmosisShare));
   const [presetId, setPresetId] = useState("default");
   const [presets, setPresets] = useState<WaterProfilePreset[]>([]);
   const { addToast } = useToast();
@@ -47,8 +56,8 @@ export function PlanOptimizerModal({
     if (isOpen) {
       setWeeks(buildWeeks(plan));
       setSelectedNutrients(["N", "P", "K", "Ca", "Mg", "S"]);
-      setWaterProfile({ ...plan.waterProfile });
-      setOsmosisShare((plan.osmosisShare * 100).toFixed(1));
+      setWaterProfile(buildWaterProfile(plan));
+      setOsmosisShare(formatOsmosis(plan.osmosisShare));
       setPresetId("default");
     }
   }, [isOpen, plan]);
@@ -68,8 +77,8 @@ export function PlanOptimizerModal({
   const reset = () => {
     setWeeks(buildWeeks(plan));
     setSelectedNutrients(["N", "P", "K", "Ca", "Mg", "S"]);
-    setWaterProfile({ ...plan.waterProfile });
-    setOsmosisShare((plan.osmosisShare * 100).toFixed(1));
+    setWaterProfile(buildWaterProfile(plan));
+    setOsmosisShare(formatOsmosis(plan.osmosisShare));
     setPresetId("default");
   };
 
@@ -131,7 +140,11 @@ export function PlanOptimizerModal({
         osmosisValue
       );
       if (!response.ok) {
-        addToast({ title: "Plan Optimierung fehlgeschlagen", description: response.error.message, variant: "error" });
+        addToast({
+          title: "Plan Optimierung fehlgeschlagen",
+          description: response.error.details ?? response.error.message,
+          variant: "error",
+        });
         return;
       }
       onApply(response.data);
