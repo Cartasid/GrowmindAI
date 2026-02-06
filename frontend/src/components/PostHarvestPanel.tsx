@@ -24,6 +24,12 @@ type DryRoomItem = {
   value?: string | number | null;
 };
 
+type DryRoomCardProps = {
+  item: DryRoomItem;
+  thresholds: typeof DEFAULT_THRESHOLDS;
+  seriesMap: Record<string, { t: string; v: number }[]>;
+};
+
 const statusFor = (role: string, value: number | null, thresholds: typeof DEFAULT_THRESHOLDS) => {
   const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
   if (!threshold || value == null) return "unknown";
@@ -38,6 +44,47 @@ const toNumber = (value: unknown): number | null => {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+};
+
+const DryRoomCard = ({ item, thresholds, seriesMap }: DryRoomCardProps) => {
+  const state = useHaEntity(item.entity_id || undefined, 10);
+  const value = toNumber(state.raw?.state ?? item.value);
+  const role = item.role ?? "";
+  const status = statusFor(role, value, thresholds);
+  const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
+  const series = item.entity_id ? seriesMap[item.entity_id] : undefined;
+  const sparkline = (() => {
+    if (!series || series.length < 2) return "";
+    const values = series.map((point) => point.v);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    return values
+      .slice(-12)
+      .map((val, index, arr) => {
+        const x = (index / Math.max(arr.length - 1, 1)) * 100;
+        const y = 24 - ((val - min) / range) * 24;
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+      })
+      .join(" ");
+  })();
+
+  return (
+    <div className="glass-card rounded-2xl px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.3em] text-white/40">{item.label || role}</p>
+      <p className="mt-2 text-lg text-white">
+        {value != null ? value.toFixed(2) : "—"} {item.unit || threshold?.unit || ""}
+      </p>
+      <p className={`mt-1 text-xs ${status === "warn" ? "text-brand-orange" : "text-white/50"}`}>
+        {status === "warn" ? "Ausserhalb Target" : status === "ok" ? "Im Ziel" : "Kein Wert"}
+      </p>
+      {sparkline && (
+        <svg viewBox="0 0 100 24" className="mt-2 h-6 w-full">
+          <path d={sparkline} fill="none" stroke="#2FE6FF" strokeWidth="2" />
+        </svg>
+      )}
+    </div>
+  );
 };
 
 export function PostHarvestPanel() {
@@ -118,11 +165,6 @@ export function PostHarvestPanel() {
       .then((payload) => setSeriesMap(payload.series || {}))
       .catch(() => setSeriesMap({}));
   }, [dryRoomTargets]);
-
-  const liveStates = dryRoomTargets.map((item) => ({
-    item,
-    state: useHaEntity(item.entity_id || undefined, 10),
-  }));
 
   const handleCreateDefaultAlerts = async () => {
     try {
@@ -261,45 +303,15 @@ export function PostHarvestPanel() {
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {liveStates.map(({ item, state }) => {
-          const value = toNumber(state.raw?.state ?? item.value);
-          const role = item.role ?? "";
-          const status = statusFor(role, value, thresholds);
-          const threshold = thresholds[role as keyof typeof DEFAULT_THRESHOLDS];
-          const series = item.entity_id ? seriesMap[item.entity_id] : undefined;
-          const sparkline = (() => {
-            if (!series || series.length < 2) return "";
-            const values = series.map((point) => point.v);
-            const min = Math.min(...values);
-            const max = Math.max(...values);
-            const range = max - min || 1;
-            return values
-              .slice(-12)
-              .map((val, index, arr) => {
-                const x = (index / Math.max(arr.length - 1, 1)) * 100;
-                const y = 24 - ((val - min) / range) * 24;
-                return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
-              })
-              .join(" ");
-          })();
-          return (
-            <div key={role || item.label} className="glass-card rounded-2xl px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-white/40">{item.label || role}</p>
-              <p className="mt-2 text-lg text-white">
-                {value != null ? value.toFixed(2) : "—"} {item.unit || threshold?.unit || ""}
-              </p>
-              <p className={`mt-1 text-xs ${status === "warn" ? "text-brand-orange" : "text-white/50"}`}>
-                {status === "warn" ? "Ausserhalb Target" : status === "ok" ? "Im Ziel" : "Kein Wert"}
-              </p>
-              {sparkline && (
-                <svg viewBox="0 0 100 24" className="mt-2 h-6 w-full">
-                  <path d={sparkline} fill="none" stroke="#2FE6FF" strokeWidth="2" />
-                </svg>
-              )}
-            </div>
-          );
-        })}
-        {liveStates.length === 0 && (
+        {dryRoomTargets.map((item) => (
+          <DryRoomCard
+            key={item.role || item.label}
+            item={item}
+            thresholds={thresholds}
+            seriesMap={seriesMap}
+          />
+        ))}
+        {dryRoomTargets.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white/60">
             Keine Dry-Room Sensoren gemappt.
           </div>
