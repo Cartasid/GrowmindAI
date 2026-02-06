@@ -28,15 +28,15 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Install Python dependencies with exact pinned versions
-# Use constraints file for reproducibility
-RUN pip3 install --no-cache-dir --no-warn-script-location \
+# Use --break-system-packages for PEP 668 compliance in Alpine 3.19+
+RUN pip3 install --no-cache-dir --no-warn-script-location --break-system-packages \
     --upgrade pip \
     setuptools \
     wheel
 
 # Create constraints file for reproducible builds
 COPY backend/pyproject.toml backend/requirements.txt* ./
-RUN pip3 install --no-cache-dir --no-warn-script-location \
+RUN pip3 install --no-cache-dir --no-warn-script-location --break-system-packages \
     "fastapi==0.109.0" \
     "uvicorn[standard]==0.27.0" \
     "httpx==0.26.0" \
