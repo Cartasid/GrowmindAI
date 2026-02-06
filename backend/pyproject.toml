@@ -10,7 +10,7 @@ dependencies = [
     "portalocker>=2.8.0",
     "google-genai>=0.3.0,<1.0.0",
     "pydantic>=2.9.0",
-    "websockets>=12.0,<13.0"
+    "websockets>=13.0,<15.0"
 ]
 
 [tool.uvicorn]
