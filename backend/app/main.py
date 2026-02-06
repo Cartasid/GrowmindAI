@@ -532,6 +532,13 @@ async def _build_dashboard_payload(state_map: Dict[str, Dict[str, Any]]) -> Dict
 def _build_service_call(input_meta: Dict[str, Any], value: Any) -> Optional[Dict[str, Any]]:
     entity_id = input_meta["entity_id"]
     input_type = input_meta.get("type")
+    domain_override = input_meta.get("domain")
+    if domain_override:
+        return {
+            "domain": str(domain_override),
+            "service": str(input_meta.get("service") or "turn_on"),
+            "payload": {"entity_id": entity_id},
+        }
 
     if input_type == "input_number":
         numeric = _coerce_number(value)
@@ -557,6 +564,22 @@ def _build_service_call(input_meta: Dict[str, Any], value: Any) -> Optional[Dict
             "service": service,
             "payload": {"entity_id": entity_id}
         }
+    if input_type in {"switch", "light", "fan"}:
+        service = "turn_on" if _coerce_bool(value) else "turn_off"
+        return {
+            "domain": input_type,
+            "service": service,
+            "payload": {"entity_id": entity_id},
+        }
+    if input_type == "fan_percentage":
+        numeric = _coerce_number(value)
+        if numeric is None:
+            raise HTTPException(status_code=400, detail=f"Invalid percentage value for '{entity_id}'")
+        return {
+            "domain": "fan",
+            "service": "set_percentage",
+            "payload": {"entity_id": entity_id, "percentage": numeric},
+        }
     if input_type == "input_datetime":
         payload: Dict[str, Any] = {"entity_id": entity_id}
         if isinstance(value, dict):
@@ -575,6 +598,76 @@ def _build_service_call(input_meta: Dict[str, Any], value: Any) -> Optional[Dict
             "domain": "input_datetime",
             "service": "set_datetime",
             "payload": payload
+        }
+    if input_type == "number":
+        numeric = _coerce_number(value)
+        if numeric is None:
+            raise HTTPException(status_code=400, detail=f"Invalid numeric value for '{entity_id}'")
+        return {
+            "domain": "number",
+            "service": "set_value",
+            "payload": {"entity_id": entity_id, "value": numeric},
+        }
+    if input_type == "select":
+        if value is None:
+            raise HTTPException(status_code=400, detail=f"Invalid selection for '{entity_id}'")
+        return {
+            "domain": "select",
+            "service": "select_option",
+            "payload": {"entity_id": entity_id, "option": str(value)},
+        }
+    if input_type == "button":
+        return {
+            "domain": "button",
+            "service": "press",
+            "payload": {"entity_id": entity_id},
+        }
+    if input_type == "script":
+        return {
+            "domain": "script",
+            "service": "turn_on",
+            "payload": {"entity_id": entity_id},
+        }
+    if input_type == "scene":
+        return {
+            "domain": "scene",
+            "service": "turn_on",
+            "payload": {"entity_id": entity_id},
+        }
+    if input_type == "climate_temperature":
+        numeric = _coerce_number(value)
+        if numeric is None:
+            raise HTTPException(status_code=400, detail=f"Invalid temperature value for '{entity_id}'")
+        return {
+            "domain": "climate",
+            "service": "set_temperature",
+            "payload": {"entity_id": entity_id, "temperature": numeric},
+        }
+    if input_type == "climate_humidity":
+        numeric = _coerce_number(value)
+        if numeric is None:
+            raise HTTPException(status_code=400, detail=f"Invalid humidity value for '{entity_id}'")
+        return {
+            "domain": "climate",
+            "service": "set_humidity",
+            "payload": {"entity_id": entity_id, "humidity": numeric},
+        }
+    if input_type == "climate_mode":
+        if value is None:
+            raise HTTPException(status_code=400, detail=f"Invalid HVAC mode for '{entity_id}'")
+        return {
+            "domain": "climate",
+            "service": "set_hvac_mode",
+            "payload": {"entity_id": entity_id, "hvac_mode": str(value)},
+        }
+    if input_type == "humidifier_target":
+        numeric = _coerce_number(value)
+        if numeric is None:
+            raise HTTPException(status_code=400, detail=f"Invalid humidity value for '{entity_id}'")
+        return {
+            "domain": "humidifier",
+            "service": "set_humidity",
+            "payload": {"entity_id": entity_id, "humidity": numeric},
         }
     return None
 

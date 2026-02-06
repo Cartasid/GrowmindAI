@@ -119,6 +119,137 @@
       }
     ]
   },
+  "climate_controls": {
+    "label": "Climate Control",
+    "inputs": [
+      {
+        "role": "hvac_mode",
+        "label": "HVAC Mode",
+        "entity_id": "climate.grow_room",
+        "type": "climate_mode"
+      },
+      {
+        "role": "temp_setpoint",
+        "label": "Temp Setpoint",
+        "entity_id": "climate.grow_room",
+        "type": "climate_temperature",
+        "unit": "°C"
+      },
+      {
+        "role": "humidity_setpoint",
+        "label": "Humidity Setpoint",
+        "entity_id": "humidifier.grow_room",
+        "type": "humidifier_target",
+        "unit": "%"
+      }
+    ]
+  },
+  "climate_actuators": {
+    "label": "Climate Actuators",
+    "inputs": [
+      {
+        "role": "heater_switch",
+        "label": "Heater",
+        "entity_id": "switch.grow_heater",
+        "type": "switch"
+      },
+      {
+        "role": "ac_switch",
+        "label": "AC",
+        "entity_id": "switch.grow_ac",
+        "type": "switch"
+      },
+      {
+        "role": "dehumidifier_switch",
+        "label": "Dehumidifier",
+        "entity_id": "switch.grow_dehumidifier",
+        "type": "switch"
+      },
+      {
+        "role": "humidifier_switch",
+        "label": "Humidifier",
+        "entity_id": "switch.grow_humidifier",
+        "type": "switch"
+      },
+      {
+        "role": "circulation_fan",
+        "label": "Circulation Fan",
+        "entity_id": "fan.grow_circulation",
+        "type": "fan_percentage",
+        "unit": "%"
+      }
+    ]
+  },
+  "irrigation_controls": {
+    "label": "Irrigation Control",
+    "inputs": [
+      {
+        "role": "irrigation_enable",
+        "label": "Irrigation Enable",
+        "entity_id": "switch.grow_irrigation",
+        "type": "switch"
+      },
+      {
+        "role": "irrigation_pulse",
+        "label": "Irrigation Pulse",
+        "entity_id": "script.grow_irrigation_pulse",
+        "type": "script"
+      },
+      {
+        "role": "flush_run",
+        "label": "Flush Run",
+        "entity_id": "script.grow_flush_cycle",
+        "type": "script"
+      },
+      {
+        "role": "drain_pump",
+        "label": "Drain Pump",
+        "entity_id": "switch.grow_drain_pump",
+        "type": "switch"
+      }
+    ]
+  },
+  "co2_controls": {
+    "label": "CO₂ Control",
+    "inputs": [
+      {
+        "role": "co2_enable",
+        "label": "CO₂ Enable",
+        "entity_id": "switch.grow_co2",
+        "type": "switch"
+      },
+      {
+        "role": "co2_target",
+        "label": "CO₂ Target",
+        "entity_id": "number.grow_co2_target",
+        "type": "number",
+        "unit": "ppm"
+      }
+    ]
+  },
+  "safety_controls": {
+    "label": "Safety & Modes",
+    "inputs": [
+      {
+        "role": "panic_mode",
+        "label": "Panic Mode",
+        "entity_id": "scene.grow_panic",
+        "type": "scene"
+      },
+      {
+        "role": "safe_mode",
+        "label": "Safe Mode",
+        "entity_id": "scene.grow_safe",
+        "type": "scene"
+      },
+      {
+        "role": "alarm_ack",
+        "label": "Acknowledge Alarm",
+        "entity_id": "button.grow_alarm_ack",
+        "type": "button"
+      }
+    ]
+  },
   "substrate_targets": {
     "label": "Substrate Targets",
     "targets": [

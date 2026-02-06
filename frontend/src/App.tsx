@@ -21,6 +21,8 @@ import { LightingControlPanel } from "./components/LightingControlPanel";
 import { AutomationsPanel } from "./components/AutomationsPanel";
 import { TimeSeriesPanel } from "./components/TimeSeriesPanel";
 import { GrafanaEmbedPanel } from "./components/GrafanaEmbedPanel";
+import { ControlCenterPanel } from "./components/ControlCenterPanel";
+import { BrandPromotionPanel } from "./components/BrandPromotionPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
@@ -505,6 +507,10 @@ function App() {
                     </motion.div>
 
                     <motion.div variants={fadeUp}>
+                      <ControlCenterPanel />
+                    </motion.div>
+
+                    <motion.div variants={fadeUp}>
                       <TimeSeriesPanel />
                     </motion.div>
 
@@ -598,6 +604,10 @@ function App() {
                       <GrafanaEmbedPanel />
                     </motion.div>
 
+                    <motion.div variants={fadeUp}>
+                      <BrandPromotionPanel />
+                    </motion.div>
+
                   </motion.div>
                 )}
                 {activeSection === "journal" && (
@@ -622,7 +632,10 @@ function App() {
                 )}
                 {activeSection === "steering" && (
                   <motion.div variants={fadeUp}>
-                    <CropSteeringPanel />
+                    <div className="space-y-10">
+                      <CropSteeringPanel />
+                      <ControlCenterPanel />
+                    </div>
                   </motion.div>
                 )}
                 {activeSection === "mapping" && (
