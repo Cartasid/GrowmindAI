@@ -5,6 +5,7 @@ type ConfigItem = {
   label?: string;
   entity_id?: string;
   type?: string;
+  unit?: string;
   value?: string | number | null;
   read_only?: boolean;
 };
