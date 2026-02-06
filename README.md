@@ -1,6 +1,10 @@
-# GrowmindAI 🌱
+# 🏠 GrowmindAI - Home Assistant Add-on Repository
 
 **Intelligent cannabis cultivation assistant powered by Google Gemini AI**, integrated with Home Assistant. Monitor climate, lighting, and substrate sensors in real-time, generate AI-powered grow plans, track nutrient schedules, and maintain comprehensive growth journals.
+
+> **ℹ️ This is a valid Home Assistant Add-on Repository!**  
+> Add this repository directly to your Home Assistant instance: `https://github.com/Cartasid/GrowmindAI`  
+> See [ADDON_REPOSITORY_SETUP.md](ADDON_REPOSITORY_SETUP.md) for detailed setup instructions.
 
 ## 🎯 Features
 

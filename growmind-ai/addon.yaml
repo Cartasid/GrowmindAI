@@ -1,0 +1,39 @@
+name: GrowMind AI
+slug: growmind-ai
+version: "0.1.0"
+description: >-
+  Intelligent cannabis cultivation assistant for Home Assistant.
+  Monitors climate, lighting, and substrate sensors in real time,
+  generates AI-powered grow plans with Gemini, tracks nutrient
+  schedules, and provides a rich journal for every growth stage —
+  all accessible through an integrated dashboard panel.
+url: https://github.com/Cartasid/GrowmindAI
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: services
+boot: auto
+hassio_api: true
+hassio_role: manager
+homeassistant_api: true
+ingress: true
+panel_icon: mdi:sprout
+panel_title: GrowMind AI
+ingress_port: 8080
+ports:
+  8080/tcp: null
+ports_description:
+  8080/tcp: Web UI (falls kein Ingress)
+options:
+  log_level: info
+  gemini_api_key: ""
+  gemini_model: gemini-2.5-flash
+schema:
+  log_level: list(debug|info|warning|error)?
+  gemini_api_key: password
+  gemini_model: str?
+map:
+  - share:rw
+
+watchdog: http://[HOST]:[PORT:8080]/health
