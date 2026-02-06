@@ -12,7 +12,7 @@ import {
   type MixResponse,
 } from "../services/nutrientService";
 import { optimizePlan } from "../services/aiService";
-import { createPlan, fetchActivePlan, fetchAvailablePlans, setActivePlan } from "../services/planService";
+import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
 import { PlanOptimizerModal } from "./PlanOptimizerModal";
 
@@ -93,27 +93,42 @@ export function NutrientCalculator() {
 
   useEffect(() => {
     let active = true;
-    setPlanLoading(true);
-    setError(null);
-    Promise.all([
-      fetchAvailablePlans(cultivar, substrate),
-      fetchActivePlan(cultivar, substrate),
-    ])
-      .then(([available, activePlan]) => {
+    const loadPlans = async () => {
+      setPlanLoading(true);
+      setError(null);
+      try {
+        const available = await fetchAvailablePlans(cultivar, substrate);
+        let activePlanId = "default";
+        try {
+          const activePlan = await fetchActivePlan(cultivar, substrate);
+          activePlanId = activePlan.planId || "default";
+        } catch (err) {
+          if (active) {
+            console.warn("Active plan fetch failed, using default", err);
+          }
+        }
+
+        let nextPlans = available;
+        if (!nextPlans.length) {
+          const fallback = await fetchDefaultPlan(cultivar, substrate);
+          nextPlans = [fallback];
+          activePlanId = "default";
+        }
+
         if (!active) return;
-        setPlans(available);
-        setActivePlanId(activePlan.planId);
-        setSelectedPlanId(activePlan.planId);
-      })
-      .catch((err) => {
+        setPlans(nextPlans);
+        setActivePlanId(activePlanId);
+        setSelectedPlanId(activePlanId);
+      } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
+      } finally {
         if (active) {
           setPlanLoading(false);
         }
-      });
+      }
+    };
+    void loadPlans();
 
     return () => {
       active = false;

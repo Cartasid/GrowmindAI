@@ -30,6 +30,14 @@ export const fetchAvailablePlans = async (
   return requestJson<ManagedPlan[]>(`/api/plans/available?${query}`);
 };
 
+export const fetchDefaultPlan = async (
+  cultivar: Cultivar,
+  substrate: Substrate
+): Promise<ManagedPlan> => {
+  const query = `cultivar=${encodeURIComponent(cultivar)}&substrate=${encodeURIComponent(substrate)}`;
+  return requestJson<ManagedPlan>(`/api/plans/default?${query}`);
+};
+
 export const fetchActivePlan = async (
   cultivar: Cultivar,
   substrate: Substrate
