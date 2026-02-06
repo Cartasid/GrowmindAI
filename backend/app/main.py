@@ -81,6 +81,12 @@ def _parse_csv_env(name: str) -> List[str]:
 
 HASS_API_BASE = _validate_hass_api_base(os.getenv("HASS_API_BASE", "http://supervisor/core/api"))
 INGRESS_PATH = os.getenv("INGRESS_PATH", "")
+
+# Token handling - clarify usage
+SUPERVISOR_TOKEN = os.getenv("SUPERVISOR_TOKEN", "").strip()
+HASS_TOKEN = os.getenv("HASS_TOKEN", "").strip()
+HASSIO_TOKEN = os.getenv("HASSIO_TOKEN", "").strip()
+
 CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
 RATE_LIMIT_WINDOW_SECONDS = _env_float("RATE_LIMIT_WINDOW_SECONDS", 60.0, minimum=1.0)
 RATE_LIMIT_MAX_REQUESTS = _env_int("RATE_LIMIT_MAX_REQUESTS", 120, minimum=0)
@@ -91,11 +97,6 @@ if RATE_LIMIT_MAX_REQUESTS > 0 and (
     INGRESS_PATH or SUPERVISOR_TOKEN or HASS_TOKEN or HASSIO_TOKEN
 ):
     RATE_LIMIT_MAX_REQUESTS = 0
-
-# Token handling - clarify usage
-SUPERVISOR_TOKEN = os.getenv("SUPERVISOR_TOKEN", "").strip()
-HASS_TOKEN = os.getenv("HASS_TOKEN", "").strip()
-HASSIO_TOKEN = os.getenv("HASSIO_TOKEN", "").strip()
 if not (SUPERVISOR_TOKEN or HASS_TOKEN or HASSIO_TOKEN):
     logger.warning("No HA authentication token configured (SUPERVISOR_TOKEN, HASS_TOKEN, or HASSIO_TOKEN)")
 
