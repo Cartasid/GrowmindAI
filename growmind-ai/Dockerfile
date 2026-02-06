@@ -18,20 +18,19 @@ RUN test -d dist && echo "Frontend build successful" || exit 1
 FROM ${BUILD_FROM} AS runtime
 
 # Install Python and essential tools
+# Don't install py3-pip from apk to avoid PEP 668 issues
 RUN apk add --no-cache \
     python3 \
-    py3-pip \
     bash \
     wget && \
     ln -sf python3 /usr/bin/python
 
 WORKDIR /app
 
-# Install Python dependencies with exact pinned versions
-# Create a virtual environment to avoid PEP 668 issues
-RUN python3 -m venv /app/venv
+# Create virtual environment using ensurepip (avoids PEP 668)
+RUN python3 -m venv --upgrade-deps /app/venv
 
-# Use the venv pip directly with full path
+# Install Python packages in venv
 RUN /app/venv/bin/pip3 install --no-cache-dir --no-warn-script-location \
     --upgrade pip \
     setuptools \
