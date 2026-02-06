@@ -6,3 +6,4 @@ python-multipart==0.0.9
 google-genai==1.32.0
 portalocker==3.2.0
 requests
+urllib3>=1.26.19 # not directly required, pinned by Snyk to avoid a vulnerability
