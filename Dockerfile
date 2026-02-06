@@ -47,7 +47,7 @@ COPY backend/pyproject.toml backend/requirements.txt* ./
 RUN pip3 install --no-cache-dir --no-warn-script-location \
     "fastapi>=0.109.0" \
     "uvicorn[standard]>=0.27.0" \
-    "httpx>=0.28.0" \
+    "httpx>=0.28.0,<0.29.0" \
     "portalocker>=2.8.1" \
     "google-genai>=1.62.0" \
     "websockets>=13.0" \
