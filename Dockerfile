@@ -49,7 +49,7 @@ RUN pip3 install --no-cache-dir --no-warn-script-location \
     "httpx>=0.28.0,<0.29.0" \
     "portalocker>=2.8.1" \
     "google-genai>=0.3.0,<1.0.0" \
-    "websockets==12.0" \
+    "websockets>=13.0,<15.0" \
     "pydantic>=2.9.0"
 
 # Copy backend source
