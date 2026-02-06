@@ -188,7 +188,7 @@ def _scale_plan_entries(template: Dict[str, Any], multipliers: Dict[str, float])
         if entry["phase"].startswith("W"):
             try:
                 week = int(entry["phase"][1:])
-                factor = ripen if week >= 9 else bloom
+                factor = ripen if week >= 8 else bloom
             except ValueError:
                 factor = bloom
         normalized = deepcopy(entry)
