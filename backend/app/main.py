@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 _telemetry_task: Optional[asyncio.Task[Any]] = None
 _telemetry_stop: Optional[asyncio.Event] = None
 _hass_client: Optional[httpx.AsyncClient] = None
-
+_last_notify_time = 0.0
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -76,21 +77,7 @@ def _load_mapping() -> Dict[str, Any]:
 MAPPING = _load_mapping()
 HASS_API_BASE = os.getenv("HASS_API_BASE", "http://supervisor/core/api")
 
-CURRENT_SPECTRUM_ENTITIES = {
-    "blue": "sensor.crop_blau_licht",
-    "red": "sensor.crop_rot_licht",
-    "far_red": "sensor.crop_far_red_licht",
-    "uva": "sensor.crop_uva_lichtstunden",
-    "boost": "sensor.crop_flower_boost_licht",
-}
-
-TARGET_SPECTRUM_ENTITIES = {
-    "blue_pct": "sensor.led_target_blue_pct",
-    "red_pct": "sensor.led_target_red_pct",
-    "boost_pct": "sensor.led_target_boost_pct",
-}
-
-AUTOPILOT_ENTITY = "input_boolean.led_autopilot_enabled"
+_UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
 
 
 def _require_token() -> str:
@@ -128,9 +115,6 @@ async def _get_states_map() -> Dict[str, Dict[str, Any]]:
     return {item["entity_id"]: item for item in response.json()}
 
 
-_UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
-
-
 def _coerce_float(value: Optional[str]) -> float:
     if value is None:
         return 0.0
@@ -141,7 +125,6 @@ def _coerce_float(value: Optional[str]) -> float:
 
 
 def _safe_float(value: Optional[str]) -> Optional[float]:
-    """Return None when a sensor reports unavailable/unknown instead of silently returning 0."""
     if value is None:
         return None
     normalized = str(value).strip().lower()
@@ -176,31 +159,32 @@ def _coerce_bool(value: Any) -> bool:
 
 
 def _build_lighting_engine(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    current = {
-        key: _coerce_float(state_map.get(entity_id, {}).get("state"))
-        for key, entity_id in CURRENT_SPECTRUM_ENTITIES.items()
-    }
-    target = {
-        key: _coerce_float(state_map.get(entity_id, {}).get("state"))
-        for key, entity_id in TARGET_SPECTRUM_ENTITIES.items()
-    }
-    autopilot_state = state_map.get(AUTOPILOT_ENTITY, {}).get("state", "off")
+    lighting_def = MAPPING.get("lighting_spectrum", {})
+    current = {}
+    for target in lighting_def.get("targets", []):
+        role = target.get("role")
+        eid = target.get("entity_id")
+        if role and eid:
+            current[role] = _coerce_float(state_map.get(eid, {}).get("state"))
+
+    autopilot_eid = next((i["entity_id"] for i in lighting_def.get("inputs", []) if i.get("role") == "autopilot"), None)
+    autopilot_state = state_map.get(autopilot_eid, {}).get("state", "off") if autopilot_eid else "off"
+
     return {
         "current_spectrum": current,
-        "target_spectrum": target,
         "autopilot": autopilot_state == "on",
     }
 
 
 def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """Check critical sensors for unavailable/unknown states and alarm conditions."""
     issues: List[str] = []
     for category, definition in MAPPING.items():
         for section_name in ("inputs", "targets"):
-            for item in definition.get(section_name, []) or []:
+            section_data = definition.get(section_name)
+            if not isinstance(section_data, list): continue
+            for item in section_data:
                 entity_id = item.get("entity_id")
-                if not entity_id:
-                    continue
+                if not entity_id: continue
                 state_obj = state_map.get(entity_id)
                 if not state_obj:
                     issues.append(f"{entity_id}: missing")
@@ -208,6 +192,7 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
                 state_val = str(state_obj.get("state") or "").lower()
                 if state_val in _UNAVAILABLE_STATES:
                     issues.append(f"{entity_id}: {state_val}")
+
     alarm_entities = [
         "binary_sensor.grow_leak_detected",
         "binary_sensor.grow_pump_dry",
@@ -220,6 +205,7 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
             state_val = str(state_obj.get("state") or "").lower()
             if state_val in ("on", "true", "detected"):
                 alarms_active.append(eid)
+
     failsafe = len(issues) > 3 or len(alarms_active) > 0
     return {
         "healthy": len(issues) == 0 and len(alarms_active) == 0,
@@ -229,8 +215,29 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
     }
 
 
-def _build_dashboard_payload(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+async def _notify_failsafe(health: Dict[str, Any]):
+    global _last_notify_time
+    if not health.get("failsafe"): return
+    now = time.time()
+    if now - _last_notify_time < 3600: return # Rate limit: 1 hour
+
+    _last_notify_time = now
+    message = "GrowMind AI detected critical system issues: " + ", ".join(health["alarms_active"] + health["sensor_issues"][:3])
+    try:
+        await _invoke_service("persistent_notification", "create", {
+            "title": "GrowMind AI Alert",
+            "message": message,
+            "notification_id": "growmind_failsafe"
+        })
+    except Exception:
+        logger.exception("Failed to send HA notification")
+
+
+async def _build_dashboard_payload(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     health = _check_sensor_health(state_map)
+    if health["failsafe"]:
+        asyncio.create_task(_notify_failsafe(health))
+
     return {
         "lighting_engine": _build_lighting_engine(state_map),
         "system_health": health,
@@ -297,10 +304,7 @@ async def _invoke_service(domain: str, service: str, payload: Dict[str, Any]) ->
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json() if exc.response.content else exc.response.text
-        except Exception:
-            detail = exc.response.text
+        detail = exc.response.json() if exc.response.content else exc.response.text
         raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Failed to call HA service: {exc}") from exc
@@ -314,49 +318,10 @@ async def read_ha_state(entity_id: str) -> Dict[str, Any]:
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json() if exc.response.content else exc.response.text
-        except Exception:
-            detail = exc.response.text
+        detail = exc.response.json() if exc.response.content else exc.response.text
         raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Failed to read HA state: {exc}") from exc
-
-
-@app.get("/api/audit/mapping")
-async def audit_mapping() -> Dict[str, Any]:
-    """Validate mapping.json entity_ids against live HA states.
-
-    Returns missing entities and entities currently reporting unknown/unavailable.
-    """
-    state_map = await _get_states_map()
-    missing: List[Dict[str, str]] = []
-    unavailable: List[Dict[str, str]] = []
-    for category, definition in MAPPING.items():
-        for section_name in ("inputs", "targets"):
-            for item in definition.get(section_name, []) or []:
-                entity_id = item.get("entity_id")
-                role = item.get("role")
-                if not entity_id:
-                    continue
-                state_obj = state_map.get(entity_id)
-                if not state_obj:
-                    missing.append({"category": category, "section": section_name, "role": str(role), "entity_id": entity_id})
-                    continue
-                state = str(state_obj.get("state") or "")
-                if state.lower() in {"unknown", "unavailable", "none", ""}:
-                    unavailable.append({"category": category, "section": section_name, "role": str(role), "entity_id": entity_id, "state": state})
-    return {"missing": missing, "unavailable": unavailable, "count": {"missing": len(missing), "unavailable": len(unavailable)}}
-
-
-def _find_input(category: str, role: str) -> Dict[str, Any]:
-    category_def = MAPPING.get(category)
-    if not category_def:
-        raise HTTPException(status_code=404, detail=f"Unknown category '{category}'")
-    for item in category_def.get("inputs", []):
-        if item.get("role") == role:
-            return item
-    raise HTTPException(status_code=404, detail=f"Role '{role}' not found in category '{category}'")
 
 
 @app.get("/health")
@@ -369,6 +334,7 @@ async def get_configuration() -> Dict[str, Any]:
     state_map = await _get_states_map()
     response: Dict[str, Any] = {}
     for category, definition in MAPPING.items():
+        if not isinstance(definition, dict): continue
         category_payload: Dict[str, Any] = {
             "label": definition.get("label", category.title()),
             "inputs": [],
@@ -376,14 +342,16 @@ async def get_configuration() -> Dict[str, Any]:
         }
 
         for input_meta in definition.get("inputs", []):
-            entity_id = input_meta["entity_id"]
-            state = state_map.get(entity_id, {}).get("state")
-            category_payload["inputs"].append({**input_meta, "value": state})
+            entity_id = input_meta.get("entity_id")
+            if entity_id:
+                state = state_map.get(entity_id, {}).get("state")
+                category_payload["inputs"].append({**input_meta, "value": state})
 
         for target_meta in definition.get("targets", []):
-            entity_id = target_meta["entity_id"]
-            state = state_map.get(entity_id, {}).get("state")
-            category_payload["targets"].append({**target_meta, "value": state, "read_only": True})
+            entity_id = target_meta.get("entity_id")
+            if entity_id:
+                state = state_map.get(entity_id, {}).get("state")
+                category_payload["targets"].append({**target_meta, "value": state, "read_only": True})
 
         response[category] = category_payload
 
@@ -393,7 +361,7 @@ async def get_configuration() -> Dict[str, Any]:
 @app.get("/api/dashboard")
 async def get_dashboard() -> Dict[str, Any]:
     state_map = await _get_states_map()
-    return _build_dashboard_payload(state_map)
+    return await _build_dashboard_payload(state_map)
 
 
 @app.post("/api/config/update")
@@ -412,6 +380,16 @@ async def update_configuration(payload: UpdatePayload):
     return {"status": "ok"}
 
 
+def _find_input(category: str, role: str) -> Dict[str, Any]:
+    category_def = MAPPING.get(category)
+    if not category_def:
+        raise HTTPException(status_code=404, detail=f"Unknown category '{category}'")
+    for item in category_def.get("inputs", []):
+        if item.get("role") == role:
+            return item
+    raise HTTPException(status_code=404, detail=f"Role '{role}' not found in category '{category}'")
+
+
 @app.websocket("/ws/lighting")
 async def lighting_websocket(websocket: WebSocket):
     await websocket.accept()
@@ -422,7 +400,7 @@ async def lighting_websocket(websocket: WebSocket):
         while True:
             try:
                 state_map = await _get_states_map()
-                payload = _build_dashboard_payload(state_map)
+                payload = await _build_dashboard_payload(state_map)
                 if payload != previous_payload:
                     await websocket.send_json(payload)
                     previous_payload = payload
@@ -445,7 +423,7 @@ async def lighting_websocket(websocket: WebSocket):
         logger.exception("WS lighting: fatal error: %s", exc)
 
 
-# --- Static mount (built frontend) ---
+# --- Static mount ---
 _static_dir = Path(__file__).resolve().parent / "static"
 if _static_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")

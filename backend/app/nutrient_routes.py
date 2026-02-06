@@ -67,34 +67,18 @@ def confirm_mix(payload: MixRequest) -> Dict[str, Any]:
         result = engine.mix_tank(payload.week_key, payload.liters)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {
-        "mix": result["mix"],
-        "top_dress": result["top_dress"],
-        "inventory": result["inventory"],
-        "alerts": result["alerts"],
-        "refill_needed": result["alerts"],
-    }
-
-
-@router.post("/calculate")
-def calculate_mix(payload: MixRequest) -> Dict[str, Any]:
-    """Backward-compatible alias for /plan."""
-    return preview_plan(payload)
-
-
-@router.post("/mix")
-def confirm_mix_legacy(payload: MixRequest) -> Dict[str, Any]:
-    """Backward-compatible alias for /confirm."""
-    return confirm_mix(payload)
+    return result
 
 
 @router.get("/inventory")
 def read_inventory() -> Dict[str, Any]:
     engine = _get_engine(None)
+    status = engine.get_stock_status()
+    alerts = engine.check_refill_needed()
     return {
-        "inventory": engine.get_stock_status(),
-        "alerts": engine.check_refill_needed(),
-        "refill_needed": engine.check_refill_needed(),
+        "inventory": status,
+        "alerts": alerts,
+        "refill_needed": alerts,
     }
 
 
@@ -102,8 +86,10 @@ def read_inventory() -> Dict[str, Any]:
 def consume_inventory(payload: InventoryConsumePayload) -> Dict[str, Any]:
     engine = _get_engine(payload.substrate)
     engine.consume_mix(payload.consumption)
+    status = engine.get_stock_status()
+    alerts = engine.check_refill_needed()
     return {
-        "inventory": engine.get_stock_status(),
-        "alerts": engine.check_refill_needed(),
-        "refill_needed": engine.check_refill_needed(),
+        "inventory": status,
+        "alerts": alerts,
+        "refill_needed": alerts,
     }

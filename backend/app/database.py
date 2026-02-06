@@ -1,0 +1,237 @@
+"""Unified SQLite database for GrowMind AI storage."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sqlite3
+import threading
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_DB_PATH = "/data/growmind.db"
+FALLBACK_DB_PATH = "/tmp/growmind.db"
+
+
+def _resolve_db_path() -> Path:
+    override = os.getenv("DATABASE_URL")
+    if override:
+        return Path(override)
+
+    primary = Path(DEFAULT_DB_PATH)
+    try:
+        primary.parent.mkdir(parents=True, exist_ok=True)
+        # Test write access
+        test_file = primary.parent / ".test_write"
+        test_file.touch()
+        test_file.unlink()
+        return primary
+    except (OSError, IOError):
+        fallback = Path(FALLBACK_DB_PATH)
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        logger.warning(
+            "Cannot write to %s – falling back to %s (data will not survive container restart)",
+            primary, fallback
+        )
+        return fallback
+
+
+class GrowMindDB:
+    _instance: Optional[GrowMindDB] = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(GrowMindDB, cls).__new__(cls)
+                cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self.path = _resolve_db_path()
+        self._init_db()
+        self._initialized = True
+
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.path), check_same_thread=False, timeout=10.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+    def _init_db(self):
+        with self._get_connection() as conn:
+            # Inventory table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS inventory (
+                    component TEXT PRIMARY KEY,
+                    grams REAL NOT NULL DEFAULT 0.0,
+                    initial_grams REAL NOT NULL DEFAULT 0.0,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Key-Value Collections table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS collections (
+                    category TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (category, key)
+                )
+            """)
+
+            # App Settings table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+
+    # --- Collection Methods ---
+
+    def get_collection(self, category: str) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT key, value FROM collections WHERE category = ?", (category,)
+            )
+            return {row["key"]: json.loads(row["value"]) for row in cursor.fetchall()}
+
+    def set_collection(self, category: str, data: Dict[str, Any]):
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM collections WHERE category = ?", (category,))
+            for key, val in data.items():
+                conn.execute(
+                    "INSERT INTO collections (category, key, value) VALUES (?, ?, ?)",
+                    (category, key, json.dumps(val))
+                )
+            conn.commit()
+
+    def get_collection_key(self, category: str, key: str, default: Any = None) -> Any:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT value FROM collections WHERE category = ? AND key = ?",
+                (category, key)
+            )
+            row = cursor.fetchone()
+            return json.loads(row["value"]) if row else default
+
+    def set_collection_key(self, category: str, key: str, value: Any):
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO collections (category, key, value, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(category, key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+                """,
+                (category, key, json.dumps(value))
+            )
+            conn.commit()
+
+    def delete_collection_key(self, category: str, key: str):
+        with self._get_connection() as conn:
+            conn.execute(
+                "DELETE FROM collections WHERE category = ? AND key = ?",
+                (category, key)
+            )
+            conn.commit()
+
+    # --- Inventory Methods ---
+
+    def fetch_inventory(self) -> Dict[str, Dict[str, float]]:
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT component, grams, initial_grams FROM inventory")
+            return {
+                row["component"]: {
+                    "grams": float(row["grams"]),
+                    "initial_grams": float(row["initial_grams"])
+                } for row in cursor.fetchall()
+            }
+
+    def update_inventory(self, component: str, grams: float, initial_grams: Optional[float] = None):
+        with self._get_connection() as conn:
+            if initial_grams is not None:
+                conn.execute(
+                    """
+                    INSERT INTO inventory (component, grams, initial_grams, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(component) DO UPDATE SET
+                    grams = excluded.grams,
+                    initial_grams = excluded.initial_grams,
+                    updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (component, grams, initial_grams)
+                )
+            else:
+                # If record doesn't exist, we should insert it instead of doing nothing
+                conn.execute(
+                    """
+                    INSERT INTO inventory (component, grams, initial_grams, updated_at)
+                    VALUES (?, ?, 0.0, CURRENT_TIMESTAMP)
+                    ON CONFLICT(component) DO UPDATE SET
+                    grams = excluded.grams,
+                    updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (grams, component, grams) # Wait, arguments order is wrong for INSERT
+                )
+                # Correcting:
+                conn.execute(
+                    """
+                    INSERT INTO inventory (component, grams, initial_grams, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(component) DO UPDATE SET
+                    grams = excluded.grams,
+                    updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (component, grams, grams)
+                )
+            conn.commit()
+
+    def ensure_inventory_items(self, items: Dict[str, float]):
+        """Ensure these components exist in the inventory table with at least these initial values."""
+        with self._get_connection() as conn:
+            for component, full_size in items.items():
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO inventory (component, grams, initial_grams)
+                    VALUES (?, ?, ?)
+                    """,
+                    (component, full_size, full_size)
+                )
+            conn.commit()
+
+    # --- Settings Methods ---
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            return json.loads(row["value"]) if row else default
+
+    def set_setting(self, key: str, value: Any):
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, json.dumps(value))
+            )
+            conn.commit()
+
+
+# Global instance
+db = GrowMindDB()
