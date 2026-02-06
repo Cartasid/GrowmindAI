@@ -29,6 +29,7 @@ export type SystemInfo = {
   cors_allowed_origins: string[];
   gemini_safety_threshold: string;
   log_format: string;
+  grafana_embed_url?: string;
 };
 
 const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {

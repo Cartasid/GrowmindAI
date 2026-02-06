@@ -5,6 +5,11 @@ export GEMINI_API_KEY="$(bashio::config 'gemini_api_key')"
 export GEMINI_MODEL="$(bashio::config 'gemini_model')"
 export LOG_LEVEL="$(bashio::config 'log_level')"
 export HASS_TOKEN="$(bashio::config 'hass_token')"
+export INFLUX_URL="$(bashio::config 'influx_url')"
+export INFLUX_TOKEN="$(bashio::config 'influx_token')"
+export INFLUX_ORG="$(bashio::config 'influx_org')"
+export INFLUX_BUCKET="$(bashio::config 'influx_bucket')"
+export GRAFANA_EMBED_URL="$(bashio::config 'grafana_embed_url')"
 
 if [ -z "${GEMINI_API_KEY:-}" ]; then
   bashio::log.warning "GEMINI_API_KEY not set – AI features will be unavailable."

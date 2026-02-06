@@ -31,12 +31,22 @@ options:
   gemini_model: gemini-2.5-flash
   gemini_safety_threshold: BLOCK_MEDIUM_AND_ABOVE
   hass_token: ""
+  influx_url: ""
+  influx_token: ""
+  influx_org: ""
+  influx_bucket: ""
+  grafana_embed_url: ""
 schema:
   log_level: list(debug|info|warning|error)?
   gemini_api_key: password
   gemini_model: str?
   gemini_safety_threshold: str?
   hass_token: password?
+  influx_url: str?
+  influx_token: password?
+  influx_org: str?
+  influx_bucket: str?
+  grafana_embed_url: str?
 map:
   - share:rw
 

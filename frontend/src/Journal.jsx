@@ -9,6 +9,7 @@ import AIJournal from "./AIJournal";
 import { JournalMetricsChart } from "./components/JournalMetricsChart";
 import { GrowthTimeline } from "./components/GrowthTimeline";
 import { PhotoGallery } from "./components/PhotoGallery";
+import { PerformanceTrackingPanel } from "./components/PerformanceTrackingPanel";
 
 const coerceDate = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -265,6 +266,10 @@ export default function Journal({
             </div>
           </div>
         </button>
+      </motion.div>
+
+      <motion.div variants={fadeUp}>
+        <PerformanceTrackingPanel entries={sortedEntries} />
       </motion.div>
 
       <motion.div variants={staggerContainer} className="mt-8 space-y-10">

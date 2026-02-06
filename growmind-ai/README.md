@@ -43,6 +43,11 @@ GrowMind AI is an intelligent assistant for cannabis cultivation that integrates
 - **Log Level**: debug, info, warning, error (default: info)
 - **Gemini Model**: Model to use for AI analysis (default: gemini-2.5-flash)
 - **HASS Token**: Optional Home Assistant long-lived access token (fallback for API auth if Supervisor token is unavailable)
+- **InfluxDB URL**: Base URL for InfluxDB v2 (e.g. http://localhost:8086)
+- **InfluxDB Token**: API token for InfluxDB v2
+- **InfluxDB Org**: Organization ID/name
+- **InfluxDB Bucket**: Bucket used for Home Assistant state storage
+- **Grafana Embed URL**: Full Grafana panel/dashboard embed URL (iframe)
 
 
 ## Usage

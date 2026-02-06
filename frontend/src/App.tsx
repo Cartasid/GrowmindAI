@@ -19,6 +19,8 @@ import { GrowManagerPanel } from "./components/GrowManagerPanel";
 import { ClimateTargetsPanel } from "./components/ClimateTargetsPanel";
 import { LightingControlPanel } from "./components/LightingControlPanel";
 import { AutomationsPanel } from "./components/AutomationsPanel";
+import { TimeSeriesPanel } from "./components/TimeSeriesPanel";
+import { GrafanaEmbedPanel } from "./components/GrafanaEmbedPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
@@ -502,6 +504,10 @@ function App() {
                       <ClimateTargetsPanel />
                     </motion.div>
 
+                    <motion.div variants={fadeUp}>
+                      <TimeSeriesPanel />
+                    </motion.div>
+
                     <motion.section variants={fadeUp}>
                       <div className="flex flex-wrap items-center justify-between gap-4">
                         <div>
@@ -586,6 +592,10 @@ function App() {
 
                     <motion.div variants={fadeUp}>
                       <LightingControlPanel />
+                    </motion.div>
+
+                    <motion.div variants={fadeUp}>
+                      <GrafanaEmbedPanel />
                     </motion.div>
 
                   </motion.div>

@@ -28,6 +28,7 @@ from .ai_routes import router as ai_router
 from .telemetry_routes import router as telemetry_router
 from .nutrient_routes import router as nutrient_router
 from .websocket_routes import router as websocket_router
+from .timeseries_routes import router as timeseries_router
 from .telemetry import telemetry_worker, shutdown_worker
 from .utils import load_mapping
 from .sanitization import InputSanitizer
@@ -211,6 +212,7 @@ app.include_router(ai_router)
 app.include_router(telemetry_router)
 app.include_router(nutrient_router)
 app.include_router(websocket_router)
+app.include_router(timeseries_router)
 
 
 class UpdatePayload(BaseModel):
@@ -770,6 +772,7 @@ async def read_system_info() -> Dict[str, Any]:
         "cors_allowed_origins": CORS_ALLOWED_ORIGINS,
         "gemini_safety_threshold": os.getenv("GEMINI_SAFETY_THRESHOLD", "BLOCK_MEDIUM_AND_ABOVE"),
         "log_format": os.getenv("LOG_FORMAT", "text"),
+        "grafana_embed_url": os.getenv("GRAFANA_EMBED_URL", ""),
     }
 
 
