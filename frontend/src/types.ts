@@ -165,6 +165,8 @@ export interface PlanOptimizationSuggestion {
   achieved?: Record<string, number>;
   diff?: Record<string, number>;
   notes?: string;
+  reasoning?: string;
+  risks?: string[];
 }
 
 export interface PlanOptimizationResponse {

@@ -10,6 +10,7 @@ import { JournalMetricsChart } from "./components/JournalMetricsChart";
 import { GrowthTimeline } from "./components/GrowthTimeline";
 import { PhotoGallery } from "./components/PhotoGallery";
 import { PerformanceTrackingPanel } from "./components/PerformanceTrackingPanel";
+import { GrowCompareTimeseries } from "./components/GrowCompareTimeseries";
 
 const coerceDate = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -285,6 +286,9 @@ export default function Journal({
             highlightEntryId={expandedId}
             onSelectEntry={(entryId) => setExpandedId(entryId)}
           />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <GrowCompareTimeseries />
         </motion.div>
         <motion.div variants={fadeUp}>
           <PhotoGallery entries={sortedEntries} onSelect={(entry) => setExpandedId(entry.id)} />

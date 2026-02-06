@@ -88,6 +88,18 @@ const getTrend = (points: TimeSeriesPoint[]) => {
   return pct > 0 ? "steigt" : "faellt";
 };
 
+const detectAnomalies = (points: TimeSeriesPoint[], threshold = 2.5) => {
+  if (points.length < 8) return [] as number[];
+  const values = points.map((point) => point.v);
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const deviation = Math.sqrt(variance) || 1;
+  return values
+    .map((value, index) => ({ index, score: Math.abs((value - mean) / deviation) }))
+    .filter((item) => item.score >= threshold)
+    .map((item) => item.index);
+};
+
 export function TimeSeriesPanel() {
   const [config, setConfig] = useState<ConfigMap | null>(null);
   const [range, setRange] = useState<RangeOption>(RANGES[1]);
@@ -186,6 +198,7 @@ export function TimeSeriesPanel() {
           const latest = points.length ? points[points.length - 1].v : null;
           const path = buildPath(points, 240, 80);
           const trend = getTrend(points);
+          const anomalies = detectAnomalies(points);
           const target = targetRange(metric);
           const targetLabel =
             target.min != null && target.max != null ? `${target.min}–${target.max} ${metric.unit}` : "—";
@@ -202,10 +215,24 @@ export function TimeSeriesPanel() {
               </div>
               <svg viewBox="0 0 240 80" className="mt-3 h-20 w-full">
                 <path d={path} fill="none" stroke={metric.color} strokeWidth="2" />
+                {anomalies.map((index) => {
+                  const point = points[index];
+                  if (!point) return null;
+                  const x = (index / Math.max(points.length - 1, 1)) * 240;
+                  const values = points.map((p) => p.v);
+                  const min = Math.min(...values);
+                  const max = Math.max(...values);
+                  const range = max - min || 1;
+                  const y = 80 - ((point.v - min) / range) * 80;
+                  return <circle key={`anomaly-${index}`} cx={x} cy={y} r={3} fill="#F97316" />;
+                })}
               </svg>
               <div className="mt-2 flex items-center justify-between text-xs text-white/60">
                 <span>Trend: {trend}</span>
                 <span>Ziel: {targetLabel}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-white/50">
+                Anomalien: {anomalies.length}
               </div>
             </div>
           );

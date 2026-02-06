@@ -476,12 +476,13 @@ def _build_optimize_prompt(payload: PlanOptimizationPayload) -> Tuple[List[types
     prompt = (
         f"{intro}\n"
         "Given weekly target elemental PPMs, propose a weekly dosing plan for base nutrients A, X, BZ plus target pH/EC.\n"
-        "Return JSON with keys: plan(array[ {phase,stage,A,X,BZ,pH,EC,achieved?,diff?,notes?} ]), summary(string optional).\n"
+        "Return JSON with keys: plan(array[ {phase,stage,A,X,BZ,pH,EC,achieved?,diff?,notes?,reasoning?,risks?} ]), summary(string optional).\n"
+        "reasoning should be a concise explanation per phase. risks should be array of short cautions.\n"
         "Return JSON only.\n"
         f"INPUT:{json.dumps(meta, ensure_ascii=False)}"
     )
     language_label = "German" if is_german else "English"
-    example = '{"plan":[{"phase":"VEG","stage":"Vegetative","A":2.0,"X":1.0,"BZ":0.5,"pH":"5.8","EC":"1.6"}],"summary":"..."}'
+    example = '{"plan":[{"phase":"VEG","stage":"Vegetative","A":2.0,"X":1.0,"BZ":0.5,"pH":"5.8","EC":"1.6","reasoning":"...","risks":["..."]}],"summary":"..."}'
     extra = _strict_json_instruction(example, language_label)
     return [types.Part.from_text(text=prompt)], extra
 

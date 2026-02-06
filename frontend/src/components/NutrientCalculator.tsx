@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import type { Cultivar, ManagedPlan, PlanEntry, Substrate } from "../types";
+import type { Cultivar, ManagedPlan, PlanEntry, PlanOptimizationSuggestion, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
@@ -88,6 +88,7 @@ export function NutrientCalculator() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<PlanOptimizationSuggestion[] | null>(null);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
   const [inventorySetInput, setInventorySetInput] = useState<Record<string, string>>({});
@@ -184,6 +185,8 @@ export function NutrientCalculator() {
       EC: string;
       notes?: string;
       stage?: string;
+      reasoning?: string;
+      risks?: string[];
     }[]
   ) =>
     suggestions.map((suggestion) => {
@@ -194,6 +197,12 @@ export function NutrientCalculator() {
       }
       if (suggestion.notes) {
         notes.push(suggestion.notes);
+      }
+      if (suggestion.reasoning) {
+        notes.push(`Begruendung: ${suggestion.reasoning}`);
+      }
+      if (suggestion.risks?.length) {
+        notes.push(`Risiken: ${suggestion.risks.join(", ")}`);
       }
       return {
         phase: suggestion.phase,
@@ -320,6 +329,7 @@ export function NutrientCalculator() {
     });
     setEditorPlan(draft);
     setAiSummary(null);
+    setAiInsights(null);
     setShowEditor(true);
   };
 
@@ -327,6 +337,7 @@ export function NutrientCalculator() {
     if (!selectedPlan) return;
     setAiGenerating(true);
     setAiSummary(null);
+    setAiInsights(null);
     try {
       const waterProfile = { ...selectedPlan.waterProfile } as Record<string, number>;
       const response = await optimizePlan(
@@ -348,6 +359,7 @@ export function NutrientCalculator() {
       });
       setEditorPlan(draft);
       setAiSummary(response.data.summary ?? null);
+      setAiInsights(response.data.plan ?? null);
       setShowEditor(true);
       addToast({ title: "AI-Plan bereit", variant: "success" });
     } catch (err) {
@@ -836,6 +848,25 @@ export function NutrientCalculator() {
               </div>
             )}
 
+            {aiInsights && aiInsights.length > 0 && (
+              <div className="mt-3 rounded-2xl border border-brand-cyan/30 bg-black/30 px-4 py-3 text-xs text-white/70">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">AI Begruendung</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {aiInsights.map((entry, index) => (
+                    <div key={`${entry.phase}-${index}`} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                      <p className="text-sm text-white">{entry.phase}</p>
+                      {entry.reasoning && <p className="mt-1 text-xs text-white/70">{entry.reasoning}</p>}
+                      {entry.risks && entry.risks.length > 0 && (
+                        <p className="mt-1 text-[11px] text-brand-orange">
+                          Risiken: {entry.risks.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="text-sm text-white/70">
                 Planname
@@ -1035,6 +1066,7 @@ export function NutrientCalculator() {
             });
             setEditorPlan(draft);
             setAiSummary(response.summary ?? null);
+            setAiInsights(response.plan ?? null);
             setShowEditor(true);
             setOptimizerOpen(false);
           }}
