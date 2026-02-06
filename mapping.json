@@ -74,6 +74,42 @@
         "label": "Humidity Day Max",
         "entity_id": "sensor.grow_humidity_day_max",
         "unit": "%"
+      },
+      {
+        "role": "vpd_night_min",
+        "label": "VPD Night Min",
+        "entity_id": "sensor.grow_vpd_night_min",
+        "unit": "kPa"
+      },
+      {
+        "role": "vpd_night_max",
+        "label": "VPD Night Max",
+        "entity_id": "sensor.grow_vpd_night_max",
+        "unit": "kPa"
+      },
+      {
+        "role": "temp_night_min",
+        "label": "Temp Night Min",
+        "entity_id": "sensor.grow_temperature_night_min",
+        "unit": "°C"
+      },
+      {
+        "role": "temp_night_max",
+        "label": "Temp Night Max",
+        "entity_id": "sensor.grow_temperature_night_max",
+        "unit": "°C"
+      },
+      {
+        "role": "hum_night_min",
+        "label": "Humidity Night Min",
+        "entity_id": "sensor.grow_humidity_night_min",
+        "unit": "%"
+      },
+      {
+        "role": "hum_night_max",
+        "label": "Humidity Night Max",
+        "entity_id": "sensor.grow_humidity_night_max",
+        "unit": "%"
       }
     ]
   },
@@ -216,19 +252,19 @@
       {
         "role": "blue_pct",
         "label": "Blue Target",
-        "entity_id": "sensor.crop_blau_licht",
+        "entity_id": "sensor.led_target_blue_pct",
         "unit": "%"
       },
       {
         "role": "red_pct",
         "label": "Red Target",
-        "entity_id": "sensor.crop_rot_licht",
+        "entity_id": "sensor.led_target_red_pct",
         "unit": "%"
       },
       {
         "role": "boost_pct",
         "label": "Boost Target",
-        "entity_id": "sensor.crop_flower_boost_licht",
+        "entity_id": "sensor.led_target_boost_pct",
         "unit": "%"
       }
     ]
@@ -270,6 +306,114 @@
         "entity_id": "input_number.crop_irrigation_amount",
         "type": "input_number",
         "unit": "ml"
+      },
+      {
+        "role": "substrate_ec",
+        "label": "Substrate EC",
+        "entity_id": "input_number.crop_ec_substrate",
+        "type": "input_number",
+        "unit": "mS/cm"
+      },
+      {
+        "role": "vwc_target",
+        "label": "VWC Target",
+        "entity_id": "input_number.crop_vwc",
+        "type": "input_number",
+        "unit": "%"
+      },
+      {
+        "role": "led_target",
+        "label": "LED Target",
+        "entity_id": "input_number.crop_led",
+        "type": "input_number",
+        "unit": "h"
+      },
+      {
+        "role": "co2_target",
+        "label": "CO₂ Target",
+        "entity_id": "input_number.crop_co2",
+        "type": "input_number",
+        "unit": "ppm"
+      },
+      {
+        "role": "ph_target",
+        "label": "pH Target",
+        "entity_id": "input_number.crop_ph",
+        "type": "input_number"
+      },
+      {
+        "role": "drain_ec",
+        "label": "Drain EC",
+        "entity_id": "input_number.drain_ec_wert",
+        "type": "input_number",
+        "unit": "mS/cm"
+      },
+      {
+        "role": "target_ec",
+        "label": "EC Target",
+        "entity_id": "input_number.ec_wert",
+        "type": "input_number",
+        "unit": "mS/cm"
+      },
+      {
+        "role": "led_transition_seconds",
+        "label": "LED Transition Seconds",
+        "entity_id": "input_number.led_transition_seconds",
+        "type": "input_number",
+        "unit": "s"
+      }
+    ]
+  },
+  "crop_steering_targets": {
+    "label": "Crop Steering Targets",
+    "targets": [
+      {
+        "role": "crop_light_hours",
+        "label": "Light Hours",
+        "entity_id": "sensor.crop_lichtstunden",
+        "unit": "h"
+      },
+      {
+        "role": "crop_blue_light",
+        "label": "Blue Light",
+        "entity_id": "sensor.crop_blau_licht",
+        "unit": "%"
+      },
+      {
+        "role": "crop_red_light",
+        "label": "Red Light",
+        "entity_id": "sensor.crop_rot_licht",
+        "unit": "%"
+      },
+      {
+        "role": "crop_far_red_light",
+        "label": "Far Red Light",
+        "entity_id": "sensor.crop_far_red_licht",
+        "unit": "%"
+      },
+      {
+        "role": "crop_far_red_hours",
+        "label": "Far Red Hours",
+        "entity_id": "sensor.crop_far_red_licht_dauer",
+        "unit": "h"
+      },
+      {
+        "role": "crop_flower_boost",
+        "label": "Flower Boost",
+        "entity_id": "sensor.crop_flower_boost_licht",
+        "unit": "%"
+      },
+      {
+        "role": "crop_uva_hours",
+        "label": "UVA Hours",
+        "entity_id": "sensor.crop_uva_lichtstunden",
+        "unit": "h"
+      },
+      {
+        "role": "crop_undercanopy",
+        "label": "Undercanopy Hours",
+        "entity_id": "sensor.crop_undercanopy",
+        "unit": "h"
       }
     ]
   },

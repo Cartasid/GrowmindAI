@@ -86,19 +86,35 @@ def _add_ppm(target: Dict[str, float], profile: Dict[str, float], multiplier: fl
 # ---------------------------------------------------------------------------
 
 class NutrientCalculator:
-    def __init__(self, *, substrate: str | None = None) -> None:
+    def __init__(self, *, substrate: str | None = None, plan_entries: Optional[List[Dict[str, Any]]] = None) -> None:
         self.substrate = substrate or os.getenv("NUTRIENT_PLAN_SUBSTRATE", "coco")
-        self._plan_entries = self._load_plan_entries(self.substrate)
+        self._plan_entries = self._load_plan_entries(self.substrate, plan_entries)
         self._inventory_config = self._load_inventory_config()
         self._seed_inventory()
 
-    def _load_plan_entries(self, substrate: str) -> Dict[str, Dict[str, Any]]:
+    def _load_plan_entries(self, substrate: str, plan_entries: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Dict[str, Any]]:
+        if plan_entries:
+            normalized = self._load_plan_entries_from_list(plan_entries)
+            if normalized:
+                return normalized
+
         template = BASE_PLAN_TEMPLATES.get(substrate)
         if not template:
             raise ValueError(f"Unknown substrate '{substrate}'")
         entries = {str(e["phase"]): e for e in template.get("plan", []) if "phase" in e}
         if not entries:
             raise ValueError("No plan entries available")
+        return entries
+
+    def _load_plan_entries_from_list(self, plan_entries: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        entries: Dict[str, Dict[str, Any]] = {}
+        for entry in plan_entries:
+            if not isinstance(entry, dict):
+                continue
+            phase = str(entry.get("phase") or "").strip()
+            if not phase:
+                continue
+            entries[phase] = entry
         return entries
 
     def _load_inventory_config(self) -> Dict[str, Dict[str, Any]]:

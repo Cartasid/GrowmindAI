@@ -4,6 +4,7 @@ import type { Substrate } from "../types";
 export interface MixRequest {
   current_week: string;
   reservoir_liters: number;
+  cultivar?: string;
   substrate?: Substrate;
 }
 
@@ -67,6 +68,9 @@ export const fetchNutrientPlan = async (payload: MixRequest): Promise<MixRespons
     current_week: payload.current_week,
     reservoir_liters: String(payload.reservoir_liters),
   });
+  if (payload.cultivar) {
+    query.set("cultivar", payload.cultivar);
+  }
   if (payload.substrate) {
     query.set("substrate", payload.substrate);
   }

@@ -88,9 +88,9 @@ RATE_LIMIT_CLEANUP_INTERVAL = _env_float("RATE_LIMIT_CLEANUP_INTERVAL", 300.0, m
 # Token handling - clarify usage
 SUPERVISOR_TOKEN = os.getenv("SUPERVISOR_TOKEN", "").strip()
 HASS_TOKEN = os.getenv("HASS_TOKEN", "").strip()
-_ACTUAL_TOKEN = SUPERVISOR_TOKEN or HASS_TOKEN  # Fallback logic
-if not _ACTUAL_TOKEN:
-    logger.warning("No HA authentication token configured (SUPERVISOR_TOKEN or HASS_TOKEN)")
+HASSIO_TOKEN = os.getenv("HASSIO_TOKEN", "").strip()
+if not (SUPERVISOR_TOKEN or HASS_TOKEN or HASSIO_TOKEN):
+    logger.warning("No HA authentication token configured (SUPERVISOR_TOKEN, HASS_TOKEN, or HASSIO_TOKEN)")
 
 _rate_limit_lock = asyncio.Lock()
 _rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
@@ -295,15 +295,20 @@ def _etag_for_payload(payload: Any) -> str:
 def _require_token() -> str:
     """Get configured Home Assistant authentication token.
     
-    Tries SUPERVISOR_TOKEN first (add-on context), then HASS_TOKEN (standalone).
+    Tries SUPERVISOR_TOKEN first (add-on context), then HASS_TOKEN, then HASSIO_TOKEN.
     Tokens are never logged due to secure logging configuration.
     """
-    if not _ACTUAL_TOKEN:
+    token = (
+        os.getenv("SUPERVISOR_TOKEN", "").strip()
+        or os.getenv("HASS_TOKEN", "").strip()
+        or os.getenv("HASSIO_TOKEN", "").strip()
+    )
+    if not token:
         raise HTTPException(
             status_code=500, 
-            detail="Home Assistant token missing (configure SUPERVISOR_TOKEN or HASS_TOKEN)"
+            detail="Home Assistant token missing (configure SUPERVISOR_TOKEN, HASS_TOKEN, or HASSIO_TOKEN)"
         )
-    return _ACTUAL_TOKEN
+    return token
 
 
 def _hass_headers() -> Dict[str, str]:
@@ -335,6 +340,9 @@ async def _validate_entity_exists(entity_id: str) -> None:
     except HTTPException:
         raise
     except httpx.HTTPError as exc:
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if status in {401, 403}:
+            raise HTTPException(status_code=401, detail="Home Assistant authentication failed.") from exc
         raise HTTPException(status_code=502, detail="Failed to validate entity in Home Assistant") from exc
 
 
@@ -345,7 +353,10 @@ async def _get_states_map() -> Dict[str, Dict[str, Any]]:
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPStatusError as exc:
-        logger.warning("Failed to read HA states (status %s).", exc.response.status_code)
+        status = exc.response.status_code
+        logger.warning("Failed to read HA states (status %s).", status)
+        if status in {401, 403}:
+            raise HTTPException(status_code=401, detail="Home Assistant authentication failed.") from exc
         raise HTTPException(status_code=502, detail="Failed to read Home Assistant states.") from exc
     except httpx.HTTPError as exc:
         logger.warning("Failed to read HA states: %s", exc)
@@ -565,8 +576,11 @@ async def _invoke_service(domain: str, service: str, payload: Dict[str, Any]) ->
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         logger.warning("HA service call failed (%s/%s): %s", domain, service, exc)
-        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant service call failed.") from exc
+        if status in {401, 403}:
+            raise HTTPException(status_code=401, detail="Home Assistant authentication failed.") from exc
+        raise HTTPException(status_code=status, detail="Home Assistant service call failed.") from exc
     except httpx.HTTPError as exc:
         logger.warning("Failed to call HA service (%s/%s): %s", domain, service, exc)
         raise HTTPException(status_code=502, detail="Failed to call Home Assistant service.") from exc
@@ -584,8 +598,11 @@ async def read_ha_state(entity_id: str, request: Request) -> Response:
             return Response(status_code=304)
         return JSONResponse(payload, headers={"ETag": etag})
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         logger.warning("HA state read failed (%s): %s", entity_id, exc)
-        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant state read failed.") from exc
+        if status in {401, 403}:
+            raise HTTPException(status_code=401, detail="Home Assistant authentication failed.") from exc
+        raise HTTPException(status_code=status, detail="Home Assistant state read failed.") from exc
     except httpx.HTTPError as exc:
         logger.warning("Failed to read HA state (%s): %s", entity_id, exc)
         raise HTTPException(status_code=502, detail="Failed to read Home Assistant state.") from exc
@@ -614,8 +631,11 @@ async def read_ha_entities(request: Request) -> Response:
             return Response(status_code=304)
         return JSONResponse(payload, headers={"ETag": etag})
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         logger.warning("HA entities read failed: %s", exc)
-        raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant entities read failed.") from exc
+        if status in {401, 403}:
+            raise HTTPException(status_code=401, detail="Home Assistant authentication failed.") from exc
+        raise HTTPException(status_code=status, detail="Home Assistant entities read failed.") from exc
     except httpx.HTTPError as exc:
         logger.warning("Failed to read HA entities: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to read Home Assistant entities.") from exc

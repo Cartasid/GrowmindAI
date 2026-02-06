@@ -450,6 +450,16 @@ def _get_active_plan(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> 
     return _get_default_plan(cultivar, substrate)
 
 
+def get_active_plan_id_for(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> str:
+    """Public helper for other modules to resolve the active plan id."""
+    return _get_active_plan_id(cultivar, substrate)
+
+
+def get_active_plan_for(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> Dict[str, Any]:
+    """Public helper for other modules to resolve the active plan payload."""
+    return _get_active_plan(cultivar, substrate)
+
+
 @router.get("/default")
 def read_default_plan(cultivar: CultivarLiteral = Query(...), substrate: SubstrateLiteral = Query(...)):
     return _get_default_plan(cultivar, substrate)

@@ -7,18 +7,26 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from nutrient_engine import NutrientCalculator
-from .plan_routes import SubstrateLiteral
+from .plan_routes import CultivarLiteral, SubstrateLiteral, get_active_plan_for, get_active_plan_id_for
 
 router = APIRouter(prefix="/api/nutrients", tags=["nutrients"])
 
 _ENGINE_CACHE: Dict[str, NutrientCalculator] = {}
 
 
-def _get_engine(substrate: Optional[str]) -> NutrientCalculator:
-    cache_key = substrate or "__default__"
+def _get_engine(
+    substrate: Optional[str],
+    *,
+    plan_entries: Optional[Dict[str, Any]] = None,
+    cache_key: Optional[str] = None,
+) -> NutrientCalculator:
+    cache_key = cache_key or substrate or "__default__"
     engine = _ENGINE_CACHE.get(cache_key)
     if engine is None:
-        engine = NutrientCalculator(substrate=substrate)
+        entries = None
+        if plan_entries and isinstance(plan_entries.get("plan"), list):
+            entries = plan_entries.get("plan")
+        engine = NutrientCalculator(substrate=substrate, plan_entries=entries)
         _ENGINE_CACHE[cache_key] = engine
     return engine
 
@@ -28,6 +36,7 @@ class MixRequest(BaseModel):
 
     week_key: str = Field(..., alias="current_week")
     liters: float = Field(..., alias="reservoir_liters", gt=0)
+    cultivar: Optional[CultivarLiteral] = None
     substrate: Optional[SubstrateLiteral] = None
 
 
@@ -40,9 +49,16 @@ class InventoryConsumePayload(BaseModel):
 def read_plan(
     current_week: str = Query(...),
     reservoir_liters: float = Query(..., gt=0),
+    cultivar: Optional[CultivarLiteral] = None,
     substrate: Optional[SubstrateLiteral] = None,
 ) -> Dict[str, Any]:
-    engine = _get_engine(substrate)
+    plan_payload = None
+    cache_key = substrate or "__default__"
+    if cultivar and substrate:
+        plan_payload = get_active_plan_for(cultivar, substrate)
+        plan_id = get_active_plan_id_for(cultivar, substrate)
+        cache_key = f"{cultivar}:{substrate}:{plan_id}"
+    engine = _get_engine(substrate, plan_entries=plan_payload, cache_key=cache_key)
     try:
         result = engine.preview_plan(current_week, reservoir_liters)
         return result
@@ -56,7 +72,13 @@ def read_plan(
 
 @router.post("/plan")
 def preview_plan(payload: MixRequest) -> Dict[str, Any]:
-    engine = _get_engine(payload.substrate)
+    plan_payload = None
+    cache_key = payload.substrate or "__default__"
+    if payload.cultivar and payload.substrate:
+        plan_payload = get_active_plan_for(payload.cultivar, payload.substrate)
+        plan_id = get_active_plan_id_for(payload.cultivar, payload.substrate)
+        cache_key = f"{payload.cultivar}:{payload.substrate}:{plan_id}"
+    engine = _get_engine(payload.substrate, plan_entries=plan_payload, cache_key=cache_key)
     try:
         result = engine.preview_plan(payload.week_key, payload.liters)
         return result
@@ -70,7 +92,13 @@ def preview_plan(payload: MixRequest) -> Dict[str, Any]:
 
 @router.post("/confirm")
 def confirm_mix(payload: MixRequest) -> Dict[str, Any]:
-    engine = _get_engine(payload.substrate)
+    plan_payload = None
+    cache_key = payload.substrate or "__default__"
+    if payload.cultivar and payload.substrate:
+        plan_payload = get_active_plan_for(payload.cultivar, payload.substrate)
+        plan_id = get_active_plan_id_for(payload.cultivar, payload.substrate)
+        cache_key = f"{payload.cultivar}:{payload.substrate}:{plan_id}"
+    engine = _get_engine(payload.substrate, plan_entries=plan_payload, cache_key=cache_key)
     try:
         result = engine.mix_tank(payload.week_key, payload.liters)
         return result

@@ -155,6 +155,11 @@ function App() {
 
   const activeMeta = sectionMeta[activeSection];
 
+  const navigateToSection = (section: SectionKey) => {
+    setActiveSection(section);
+    window.history.replaceState(null, "", `#${section}`);
+  };
+
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
     if (hash && Object.keys(sectionMeta).includes(hash)) {
@@ -380,7 +385,10 @@ function App() {
                           <h2 className="gradient-text text-xl font-semibold">Klima</h2>
                           <p className="text-sm text-white/60">Tesla-dark climate loop · optimiert für VPD 1.2</p>
                         </div>
-                        <button className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm text-white/70 transition hover:border-grow-cyan/60 hover:text-grow-cyan">
+                        <button
+                          className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm text-white/70 transition hover:border-grow-cyan/60 hover:text-grow-cyan"
+                          onClick={() => navigateToSection("mapping")}
+                        >
                           Regelkurve
                         </button>
                       </div>
@@ -425,10 +433,16 @@ function App() {
                           <p className="text-sm text-white/60">Deep root analytics · GrowMind signature mix</p>
                         </div>
                         <div className="flex flex-wrap gap-3">
-                          <button className="rounded-full border border-white/10 px-5 py-2 text-sm text-white/60 hover:border-grow-violet/70 hover:text-grow-violet">
+                          <button
+                            className="rounded-full border border-white/10 px-5 py-2 text-sm text-white/60 hover:border-grow-violet/70 hover:text-grow-violet"
+                            onClick={() => navigateToSection("mapping")}
+                          >
                             Sensor-Map
                           </button>
-                          <button className="rounded-full border border-grow-cyan/30 bg-grow-cyan/10 px-5 py-2 text-sm text-grow-cyan shadow-neon hover:bg-grow-cyan/20">
+                          <button
+                            className="rounded-full border border-grow-cyan/30 bg-grow-cyan/10 px-5 py-2 text-sm text-grow-cyan shadow-neon hover:bg-grow-cyan/20"
+                            onClick={() => navigateToSection("nutrients")}
+                          >
                             Optimierung
                           </button>
                         </div>

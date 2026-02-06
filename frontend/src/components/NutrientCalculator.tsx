@@ -135,6 +135,7 @@ export function NutrientCalculator() {
       const response = await fetchNutrientPlan({
         current_week: inputs.phase,
         reservoir_liters: inputs.reservoir,
+        cultivar,
         substrate,
       });
       setResult(response);
@@ -240,6 +241,11 @@ export function NutrientCalculator() {
                   ))}
                 </select>
               </label>
+              {!planLoading && plans.length === 0 && (
+                <div className="rounded-2xl border border-brand-red/40 bg-brand-red/10 px-4 py-3 text-xs text-brand-red">
+                  Keine Pläne verfügbar. Prüfe die API-Verbindung oder die Plan-Konfiguration.
+                </div>
+              )}
               {selectedPlan && (
                 <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/40">Plan-Info</p>
