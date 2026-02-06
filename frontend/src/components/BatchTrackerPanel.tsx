@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import { deleteBatch, fetchBatches, saveBatch, type Batch } from "../services/operationsService";
 import { useToast } from "./ToastProvider";
 
+const DEFAULT_AREA_SQFT = 1.2 * 1.2 * 10.7639;
+
 const emptyBatch: Batch = {
   strain: "",
   room: "",
   startDate: "",
   harvestDate: "",
-  areaSqFt: null,
+  areaSqFt: Number(DEFAULT_AREA_SQFT.toFixed(2)),
   wetWeight: null,
   dryWeight: null,
   status: "active",
@@ -68,8 +70,9 @@ export function BatchTrackerPanel() {
   };
 
   const yieldPerSqft = (batch: Batch) => {
-    if (!batch.dryWeight || !batch.areaSqFt) return null;
-    return batch.dryWeight / batch.areaSqFt;
+    const area = batch.areaSqFt || DEFAULT_AREA_SQFT;
+    if (!batch.dryWeight || !area) return null;
+    return batch.dryWeight / area;
   };
 
   return (
@@ -78,7 +81,7 @@ export function BatchTrackerPanel() {
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-white/50">Batches</p>
           <h2 className="gradient-text mt-1 text-2xl font-light">Ernte & Batch Tracking</h2>
-          <p className="mt-2 text-sm text-white/60">Strain, Area, Yield pro sq ft und Status.</p>
+          <p className="mt-2 text-sm text-white/60">Strain, Area, Yield pro sq ft und Status (Default: 1.2m x 1.2m).</p>
         </div>
         <span className="brand-chip normal-case text-[10px]">{loading ? "Laedt" : "Bereit"}</span>
       </div>
@@ -118,7 +121,7 @@ export function BatchTrackerPanel() {
                 type="number"
                 value={draft.areaSqFt ?? ""}
                 onChange={(event) => setDraft((prev) => ({ ...prev, areaSqFt: toNumber(event.target.value) }))}
-                placeholder="Area sq ft"
+                placeholder="Area sq ft (default 15.5)"
                 className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
               />
               <input

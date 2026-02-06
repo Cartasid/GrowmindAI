@@ -75,7 +75,7 @@ export function RulesEnginePanel() {
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-white/50">Rules Engine</p>
           <h2 className="gradient-text mt-1 text-2xl font-light">Automationsregeln</h2>
-          <p className="mt-2 text-sm text-white/60">IF/THEN Logik fuer Klima, Licht und Bewaesserung.</p>
+          <p className="mt-2 text-sm text-white/60">Human-readable Regeln fuer Klima, Licht und Bewaesserung.</p>
         </div>
         <span className="brand-chip normal-case text-[10px]">{loading ? "Laedt" : "Bereit"}</span>
       </div>
@@ -83,6 +83,9 @@ export function RulesEnginePanel() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
           <p className="meta-mono text-[11px] text-white/50">Neue Regel</p>
+          <p className="mt-2 text-xs text-white/50">
+            Syntax: WENN &lt;Messwert&gt; &lt;Operator&gt; &lt;Wert&gt;, DANN &lt;Aktion&gt;.
+          </p>
           <div className="mt-4 space-y-3">
             <input
               value={draft.name}
@@ -93,13 +96,13 @@ export function RulesEnginePanel() {
             <input
               value={draft.when}
               onChange={(event) => setDraft((prev) => ({ ...prev, when: event.target.value }))}
-              placeholder="WHEN (z.B. VPD > 1.6)"
+              placeholder="WENN z.B. VPD > 1.6 oder RH < 52"
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
             <input
               value={draft.then}
               onChange={(event) => setDraft((prev) => ({ ...prev, then: event.target.value }))}
-              placeholder="THEN (z.B. Erhoehe Bewaesserung)"
+              placeholder="DANN z.B. Erhoehe Bewaesserung oder Senke Temp"
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-white"
             />
             <select
