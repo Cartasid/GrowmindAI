@@ -247,6 +247,13 @@ class NutrientCalculator:
                 full = float(meta.get("full_size") or 0.0)
                 db.update_inventory(key, 0.0, full)
 
+    def set_inventory_level(self, component: str, grams: float) -> None:
+        meta = self._inventory_config.get(component)
+        if not meta:
+            raise ValueError(f"Unknown inventory component '{component}'")
+        full = float(meta.get("full_size") or 0.0)
+        db.update_inventory(component, max(0.0, grams), full if full > 0 else None)
+
     def get_stock_status(self) -> Dict[str, Dict[str, Any]]:
         levels = db.fetch_inventory()
         status = {}
@@ -264,7 +271,19 @@ class NutrientCalculator:
         status = self.get_stock_status()
         alerts = []
         for key, info in status.items():
-            if info["current"] < info.get("threshold_warn", 0):
+            threshold = info.get("threshold_warn")
+            percent_threshold = info.get("threshold_warn_percent")
+            if percent_threshold is not None:
+                try:
+                    percent_threshold = float(percent_threshold)
+                except (TypeError, ValueError):
+                    percent_threshold = None
+            is_low_percent = (
+                percent_threshold is not None
+                and info.get("percent") is not None
+                and info["percent"] <= percent_threshold
+            )
+            if (threshold is not None and info["current"] < threshold) or is_low_percent:
                 alerts.append({
                     "key": key,
                     "name": info["name"],

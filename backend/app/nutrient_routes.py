@@ -45,6 +45,11 @@ class InventoryConsumePayload(BaseModel):
     substrate: Optional[SubstrateLiteral] = None
 
 
+class InventorySetPayload(BaseModel):
+    component: str
+    grams: float
+
+
 @router.get("/plan")
 def read_plan(
     current_week: str = Query(...),
@@ -141,3 +146,23 @@ def consume_inventory(payload: InventoryConsumePayload) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Invalid consumption data: {str(exc)}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Consume error: {str(exc)}") from exc
+
+
+@router.post("/inventory/set")
+def set_inventory(payload: InventorySetPayload) -> Dict[str, Any]:
+    engine = _get_engine(None)
+    try:
+        if payload.grams < 0:
+            raise ValueError("Inventory value must be non-negative")
+        engine.set_inventory_level(payload.component, payload.grams)
+        status = engine.get_stock_status()
+        alerts = engine.check_refill_needed()
+        return {
+            "inventory": status,
+            "alerts": alerts,
+            "refill_needed": alerts,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid inventory data: {str(exc)}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Inventory update error: {str(exc)}") from exc

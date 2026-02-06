@@ -126,25 +126,29 @@
         "role": "vwc_day_min",
         "label": "VWC Day Min",
         "entity_id": "sensor.grow_vwc_day_min",
-        "unit": "%"
+        "unit": "%",
+        "optional": true
       },
       {
         "role": "vwc_day_max",
         "label": "VWC Day Max",
         "entity_id": "sensor.grow_vwc_day_max",
-        "unit": "%"
+        "unit": "%",
+        "optional": true
       },
       {
         "role": "ecp_day_min",
         "label": "ECp Day Min",
         "entity_id": "sensor.grow_ecp_day_min",
-        "unit": "mS/cm"
+        "unit": "mS/cm",
+        "optional": true
       },
       {
         "role": "ecp_day_max",
         "label": "ECp Day Max",
         "entity_id": "sensor.grow_ecp_day_max",
-        "unit": "mS/cm"
+        "unit": "mS/cm",
+        "optional": true
       }
     ]
   },
@@ -430,6 +434,7 @@
         "unit": "g",
         "full_size": 1500,
         "threshold_warn": 250,
+        "threshold_warn_percent": 10,
         "role": "base",
         "description": "Basis-Versorgung (N+Ca). 1.5kg Big Pack."
       },
@@ -438,6 +443,7 @@
         "unit": "g",
         "full_size": 250,
         "threshold_warn": 50,
+        "threshold_warn_percent": 10,
         "role": "veg_base",
         "description": "Veg & Early Flower Basis."
       },
@@ -446,6 +452,7 @@
         "unit": "g",
         "full_size": 500,
         "threshold_warn": 100,
+        "threshold_warn_percent": 10,
         "role": "bloom_base",
         "description": "Bloom Basis (N-frei)."
       },
@@ -454,6 +461,7 @@
         "unit": "g",
         "full_size": 250,
         "threshold_warn": 50,
+        "threshold_warn_percent": 10,
         "role": "booster",
         "description": "PK-Booster (Late Flower)."
       }
@@ -464,6 +472,7 @@
         "unit": "g",
         "full_size": 100,
         "threshold_warn": 10,
+        "threshold_warn_percent": 10,
         "role": "structure",
         "description": "Silikat (Top Dress, 4g/Pflanze in W1). One-Shot."
       },
@@ -472,6 +481,7 @@
         "unit": "g",
         "full_size": 100,
         "threshold_warn": 20,
+        "threshold_warn_percent": 10,
         "role": "stress",
         "description": "Stress-Schutz (Pulver)."
       },
@@ -480,6 +490,7 @@
         "unit": "ml",
         "full_size": 250,
         "threshold_warn": 40,
+        "threshold_warn_percent": 10,
         "role": "vitality",
         "description": "Bio-Booster (Liquid)."
       },
@@ -488,6 +499,7 @@
         "unit": "ml",
         "full_size": 250,
         "threshold_warn": 40,
+        "threshold_warn_percent": 10,
         "role": "uptake",
         "description": "Aufnahme-Booster (Liquid)."
       }

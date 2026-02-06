@@ -8,6 +8,7 @@ import {
   fetchNutrientPlan,
   confirmNutrientMix,
   consumeInventory,
+  setInventoryLevel,
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
@@ -89,6 +90,7 @@ export function NutrientCalculator() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
+  const [inventorySetInput, setInventorySetInput] = useState<Record<string, string>>({});
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -228,6 +230,24 @@ export function NutrientCalculator() {
     setInputs((prev: PlanInputs) => ({ ...prev, [key]: value }));
   };
 
+  const handleInventorySet = async (key: string) => {
+    const raw = inventorySetInput[key] ?? "";
+    if (!raw.trim()) return;
+    const value = Number(String(raw).replace(",", "."));
+    if (!Number.isFinite(value) || value < 0) {
+      addToast({ title: "Ungueltiger Wert", description: "Bitte eine Zahl >= 0 eingeben.", variant: "error" });
+      return;
+    }
+    try {
+      const response = await setInventoryLevel({ component: key, grams: value });
+      setInventory(response);
+      setInventorySetInput((prev) => ({ ...prev, [key]: "" }));
+      addToast({ title: "Bestand aktualisiert", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Update fehlgeschlagen", description: message, variant: "error" });
+    }
+  };
   const handleCalculate = async () => {
     setCalculating(true);
     setError(null);
@@ -740,6 +760,23 @@ export function NutrientCalculator() {
                           onClick={() => handleInventoryConsume(key)}
                         >
                           Buchen
+                        </button>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.1}
+                          value={inventorySetInput[key] ?? ""}
+                          onChange={(event: ValueEvent) =>
+                            setInventorySetInput((prev) => ({ ...prev, [key]: event.target.value }))
+                          }
+                          className="w-24 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-sm text-white"
+                          placeholder="Bestand"
+                        />
+                        <button
+                          className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-white/70 hover:border-brand-cyan/40"
+                          onClick={() => handleInventorySet(key)}
+                        >
+                          Setzen
                         </button>
                       </div>
                     </div>

@@ -85,7 +85,9 @@ RATE_LIMIT_MAX_REQUESTS = _env_int("RATE_LIMIT_MAX_REQUESTS", 120, minimum=0)
 RATE_LIMIT_TRUSTED_IPS = set(_parse_csv_env("RATE_LIMIT_TRUSTED_IPS"))
 WS_MAX_ERRORS = _env_int("WS_MAX_ERRORS", 6)
 RATE_LIMIT_CLEANUP_INTERVAL = _env_float("RATE_LIMIT_CLEANUP_INTERVAL", 300.0, minimum=10.0)
-if INGRESS_PATH and RATE_LIMIT_MAX_REQUESTS > 0:
+if RATE_LIMIT_MAX_REQUESTS > 0 and (
+    INGRESS_PATH or SUPERVISOR_TOKEN or HASS_TOKEN or HASSIO_TOKEN
+):
     RATE_LIMIT_MAX_REQUESTS = 0
 
 # Token handling - clarify usage
@@ -451,6 +453,8 @@ def _check_sensor_health(state_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]
             section_data = definition.get(section_name)
             if not isinstance(section_data, list): continue
             for item in section_data:
+                if item.get("optional") is True:
+                    continue
                 entity_id = item.get("entity_id")
                 if not entity_id: continue
                 state_obj = state_map.get(entity_id)

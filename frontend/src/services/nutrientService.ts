@@ -100,3 +100,14 @@ export const consumeInventory = async (payload: {
     body: JSON.stringify(payload),
   });
 };
+
+export const setInventoryLevel = async (payload: {
+  component: string;
+  grams: number;
+}): Promise<InventoryResponse> => {
+  return requestJson<InventoryResponse>("/api/nutrients/inventory/set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};
