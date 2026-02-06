@@ -33,8 +33,8 @@ def _parse_csv_env(name: str) -> List[str]:
 
 CORS_ALLOWED_ORIGINS = _parse_csv_env("CORS_ALLOWED_ORIGINS")
 if not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS = ["http://localhost:8099", "http://localhost:5173"]
-    logger.warning("CORS_ALLOWED_ORIGINS not set; using defaults: %s", CORS_ALLOWED_ORIGINS)
+    CORS_ALLOWED_ORIGINS = []
+    logger.error("CORS_ALLOWED_ORIGINS not set; CORS disabled until configured.")
 
 app = FastAPI(root_path=ROOT_PATH)
 app.add_middleware(

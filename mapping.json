@@ -210,6 +210,29 @@
       }
     ]
   },
+  "lighting_targets": {
+    "label": "Lighting Targets",
+    "targets": [
+      {
+        "role": "blue_pct",
+        "label": "Blue Target",
+        "entity_id": "sensor.crop_blau_licht",
+        "unit": "%"
+      },
+      {
+        "role": "red_pct",
+        "label": "Red Target",
+        "entity_id": "sensor.crop_rot_licht",
+        "unit": "%"
+      },
+      {
+        "role": "boost_pct",
+        "label": "Boost Target",
+        "entity_id": "sensor.crop_flower_boost_licht",
+        "unit": "%"
+      }
+    ]
+  },
   "crop_steering": {
     "label": "Crop Steering",
     "inputs": [
