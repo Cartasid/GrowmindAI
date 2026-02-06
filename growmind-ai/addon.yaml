@@ -31,12 +31,14 @@ options:
   gemini_model: gemini-2.5-flash
   gemini_safety_threshold: BLOCK_MEDIUM_AND_ABOVE
   hass_token: ""
+  water_profile_presets: ""
 schema:
   log_level: list(debug|info|warning|error)?
   gemini_api_key: password
   gemini_model: str?
   gemini_safety_threshold: str?
   hass_token: password?
+  water_profile_presets: str?
 map:
   - share:rw
 

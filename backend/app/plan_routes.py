@@ -1,6 +1,7 @@
 """Plan management endpoints ported from the PhotonFlux add-on."""
 from __future__ import annotations
 
+import json
 import math
 import uuid
 from copy import deepcopy
@@ -263,6 +264,9 @@ DEFAULT_PLAN: Dict[CultivarLiteral, Dict[SubstrateLiteral, Dict[str, Any]]] = {
 def _water_profile_presets(substrate: SubstrateLiteral) -> List[Dict[str, Any]]:
     base_profile = deepcopy(DEFAULT_WATER_PROFILE)
     base_osmosis = DEFAULT_OSMOSIS_SHARES.get(substrate, 0.0)
+    configured_presets = _configured_water_profile_presets(substrate, base_profile, base_osmosis)
+    if configured_presets:
+        return configured_presets
     return [
         {
             "id": "default",
@@ -283,6 +287,90 @@ def _water_profile_presets(substrate: SubstrateLiteral) -> List[Dict[str, Any]]:
             "osmosisShare": 0.8,
         },
     ]
+
+
+def _read_addon_options() -> Dict[str, Any]:
+    try:
+        with open("/data/options.json", "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _preset_applies_to_substrate(value: Any, substrate: SubstrateLiteral) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if not cleaned or cleaned == "all":
+            return True
+        return cleaned == substrate
+    if isinstance(value, (list, tuple, set)):
+        normalized = [str(item).strip().lower() for item in value if item is not None]
+        return substrate in normalized or "all" in normalized
+    return False
+
+
+def _merge_water_profile(base_profile: Dict[str, float], override: Any) -> Dict[str, float]:
+    merged = deepcopy(base_profile)
+    if not isinstance(override, dict):
+        return merged
+    for key in NUTRIENT_KEYS:
+        if key in override:
+            merged[key] = _coerce_float(override.get(key), merged.get(key, 0.0))
+    return merged
+
+
+def _configured_water_profile_presets(
+    substrate: SubstrateLiteral, base_profile: Dict[str, float], base_osmosis: float
+) -> List[Dict[str, Any]]:
+    options = _read_addon_options()
+    raw_presets: Any = options.get("water_profile_presets")
+    if isinstance(raw_presets, str):
+        raw_presets = raw_presets.strip()
+        if not raw_presets:
+            return []
+        try:
+            raw_presets = json.loads(raw_presets)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(raw_presets, dict):
+        raw_presets = raw_presets.get("presets")
+    if not isinstance(raw_presets, list):
+        return []
+
+    presets: List[Dict[str, Any]] = []
+    for item in raw_presets:
+        if not isinstance(item, dict):
+            continue
+        if not _preset_applies_to_substrate(item.get("substrate"), substrate):
+            continue
+        preset_id = str(item.get("id") or "").strip()
+        if not preset_id:
+            continue
+        label = str(item.get("label") or preset_id).strip()
+        osmosis = _coerce_float(item.get("osmosisShare", item.get("osmosis_share")), base_osmosis)
+        osmosis = max(0.0, min(osmosis, 1.0))
+        profile_override = item.get("waterProfile", item.get("water_profile"))
+        presets.append({
+            "id": preset_id,
+            "label": label,
+            "waterProfile": _merge_water_profile(base_profile, profile_override),
+            "osmosisShare": osmosis,
+        })
+    return presets
 
 
 def _combo_key(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> str:
