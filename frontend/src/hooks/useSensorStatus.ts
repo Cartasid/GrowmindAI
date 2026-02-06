@@ -32,6 +32,7 @@ interface SensorStatusParams {
 
 interface SensorStatusResult {
   status: SensorStatus;
+  loading: boolean;
   value: number | null;
   min: number | null;
   max: number | null;
@@ -249,9 +250,11 @@ export const useSensorStatus = ({
   })();
 
   const normalizedStatus: SensorStatus = alarmTriggered ? "critical" : (sensorsUnavailable || unavailable) ? "warning" : status;
+  const loading = configStatus === "loading" || actual.status === "loading";
 
   return {
     status: normalizedStatus,
+    loading,
     value,
     min: minValue,
     max: maxValue,

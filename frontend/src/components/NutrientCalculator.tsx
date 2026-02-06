@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Cultivar, ManagedPlan, Substrate } from "../types";
+import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
   fetchNutrientPlan,
@@ -59,6 +60,7 @@ export function NutrientCalculator() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
+  const { addToast } = useToast();
 
   useEffect(() => {
     let active = true;
@@ -138,6 +140,11 @@ export function NutrientCalculator() {
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      addToast({
+        title: "Berechnung fehlgeschlagen",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "error",
+      });
     } finally {
       setCalculating(false);
     }
@@ -148,8 +155,14 @@ export function NutrientCalculator() {
     try {
       const newActive = await setActivePlan(cultivar, substrate, selectedPlanId);
       setActivePlanId(newActive);
+      addToast({ title: "Plan aktiviert", variant: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      addToast({
+        title: "Plan konnte nicht aktiviert werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "error",
+      });
     }
   };
 

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -12,7 +13,7 @@ from urllib.parse import urlparse
 from copy import deepcopy
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +21,7 @@ from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
 from .database import InvalidIdentifierError, db
-from .logging_config import setup_secure_logging
+from .logging_config import setup_log_format, setup_secure_logging
 from .plan_routes import router as plan_router
 from .journal_routes import router as journal_router
 from .ai_routes import router as ai_router
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Setup secure logging with credential redaction
 setup_secure_logging()
+setup_log_format()
 
 
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
@@ -220,12 +222,24 @@ class MappingOverridePayload(BaseModel):
     entity_id: str
 
 
+class MappingImportPayload(BaseModel):
+    overrides: Dict[str, Any]
+
+
 BASE_MAPPING = load_mapping()
+MAPPING_OVERRIDES_KEY = "mapping_overrides_v2"
+LEGACY_MAPPING_OVERRIDES_KEY = "mapping_overrides"
 
 
 def _load_mapping_overrides() -> Dict[str, Any]:
-    raw = db.get_setting("mapping_overrides", {})
-    return raw if isinstance(raw, dict) else {}
+    raw = db.get_setting(MAPPING_OVERRIDES_KEY, {})
+    if isinstance(raw, dict) and raw:
+        return raw
+    legacy = db.get_setting(LEGACY_MAPPING_OVERRIDES_KEY, {})
+    if isinstance(legacy, dict) and legacy:
+        db.set_setting(MAPPING_OVERRIDES_KEY, legacy)
+        return legacy
+    return {}
 
 
 def _apply_mapping_overrides(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
@@ -264,13 +278,18 @@ def _set_mapping_override(payload: MappingOverridePayload) -> Dict[str, Any]:
     else:
         if role in section_overrides:
             del section_overrides[role]
-    db.set_setting("mapping_overrides", overrides)
+    db.set_setting(MAPPING_OVERRIDES_KEY, overrides)
     return overrides
 
 
 MAPPING = _apply_mapping_overrides(BASE_MAPPING, _load_mapping_overrides())
 
 _UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
+
+
+def _etag_for_payload(payload: Any) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
 
 def _require_token() -> str:
@@ -304,6 +323,19 @@ async def _hass() -> httpx.AsyncClient:
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             )
     return _hass_client
+
+
+async def _validate_entity_exists(entity_id: str) -> None:
+    try:
+        client = await _hass()
+        response = await client.get(f"/states/{entity_id}", headers=_hass_headers())
+        if response.status_code == 404:
+            raise HTTPException(status_code=400, detail=f"Entity '{entity_id}' not found in Home Assistant")
+        response.raise_for_status()
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Failed to validate entity in Home Assistant") from exc
 
 
 async def _get_states_map() -> Dict[str, Dict[str, Any]]:
@@ -541,12 +573,16 @@ async def _invoke_service(domain: str, service: str, payload: Dict[str, Any]) ->
 
 
 @app.get("/api/ha/state/{entity_id}")
-async def read_ha_state(entity_id: str) -> Dict[str, Any]:
+async def read_ha_state(entity_id: str, request: Request) -> Response:
     try:
         client = await _hass()
         response = await client.get(f"/states/{entity_id}", headers=_hass_headers())
         response.raise_for_status()
-        return response.json()
+        payload = response.json()
+        etag = _etag_for_payload(payload)
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304)
+        return JSONResponse(payload, headers={"ETag": etag})
     except httpx.HTTPStatusError as exc:
         logger.warning("HA state read failed (%s): %s", entity_id, exc)
         raise HTTPException(status_code=exc.response.status_code, detail="Home Assistant state read failed.") from exc
@@ -561,7 +597,7 @@ async def health_check():
 
 
 @app.get("/api/config")
-async def get_configuration() -> Dict[str, Any]:
+async def get_configuration(request: Request) -> Response:
     state_map = await _get_states_map()
     response: Dict[str, Any] = {}
     for category, definition in MAPPING.items():
@@ -586,7 +622,10 @@ async def get_configuration() -> Dict[str, Any]:
 
         response[category] = category_payload
 
-    return response
+    etag = _etag_for_payload(response)
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+    return JSONResponse(response, headers={"ETag": etag})
 
 
 @app.get("/api/dashboard")
@@ -614,9 +653,34 @@ async def update_configuration(payload: UpdatePayload):
 @app.post("/api/config/mapping")
 async def update_mapping(payload: MappingOverridePayload) -> Dict[str, Any]:
     global MAPPING
+    if payload.entity_id:
+        await _validate_entity_exists(payload.entity_id)
     overrides = _set_mapping_override(payload)
     MAPPING = _apply_mapping_overrides(BASE_MAPPING, overrides)
     return {"status": "ok"}
+
+
+@app.get("/api/config/mapping")
+async def read_mapping_overrides() -> Dict[str, Any]:
+    return {"overrides": _load_mapping_overrides()}
+
+
+@app.post("/api/config/mapping/import")
+async def import_mapping(payload: MappingImportPayload) -> Dict[str, Any]:
+    global MAPPING
+    overrides = payload.overrides if isinstance(payload.overrides, dict) else {}
+    db.set_setting(MAPPING_OVERRIDES_KEY, overrides)
+    MAPPING = _apply_mapping_overrides(BASE_MAPPING, overrides)
+    return {"status": "ok"}
+
+
+@app.get("/api/system/info")
+async def read_system_info() -> Dict[str, Any]:
+    return {
+        "cors_allowed_origins": CORS_ALLOWED_ORIGINS,
+        "gemini_safety_threshold": os.getenv("GEMINI_SAFETY_THRESHOLD", "BLOCK_MEDIUM_AND_ABOVE"),
+        "log_format": os.getenv("LOG_FORMAT", "text"),
+    }
 
 
 def _find_input(category: str, role: str) -> Dict[str, Any]:

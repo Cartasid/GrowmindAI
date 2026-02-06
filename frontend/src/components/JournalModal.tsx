@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { useJournal } from "../hooks/useJournal";
 import { analyzeGrowthStage, analyzePlantImage } from "../services/aiService";
+import { useToast } from "./ToastProvider";
 
 interface JournalModalProps {
   isOpen: boolean;
@@ -67,6 +68,7 @@ export function JournalModal({
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [stageMessage, setStageMessage] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   useEffect(() => {
     if (isCreating) {
@@ -132,11 +134,18 @@ export function JournalModal({
         const saved = await addEntry(baseEntry);
         setIsCreating(false);
         selectEntry(saved.id);
+        addToast({ title: "Journal gespeichert", variant: "success" });
       } else {
         await updateEntry({ ...baseEntry, id: formData.id });
+        addToast({ title: "Journal aktualisiert", variant: "success" });
       }
     } catch (err) {
       console.error("Journal save failed", err);
+      addToast({
+        title: "Speichern fehlgeschlagen",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "error",
+      });
     }
   };
 
@@ -144,8 +153,14 @@ export function JournalModal({
     if (selectedEntry?.id) {
       try {
         await removeEntry(selectedEntry.id);
+        addToast({ title: "Eintrag geloescht", variant: "success" });
       } catch (err) {
         console.error("Journal delete failed", err);
+        addToast({
+          title: "Loeschen fehlgeschlagen",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "error",
+        });
       }
     }
   };

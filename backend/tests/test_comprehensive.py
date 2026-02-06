@@ -218,6 +218,34 @@ class TestJournalValidation:
             FeedingDetails(A=-1.0, X=5.0, BZ=3.0, EC="2.1", pH="6.2")
 
 
+class TestMappingOverrides:
+    """Test mapping override flow without HA dependencies."""
+
+    def test_mapping_override_applies(self, db):
+        from app.main import (
+            _apply_mapping_overrides,
+            _load_mapping_overrides,
+            _set_mapping_override,
+            BASE_MAPPING,
+            MappingOverridePayload,
+        )
+
+        payload = MappingOverridePayload(
+            category="live_sensors",
+            section="targets",
+            role="actual_vpd",
+            entity_id="sensor.test_vpd",
+        )
+
+        _set_mapping_override(payload)
+        overrides = _load_mapping_overrides()
+        merged = _apply_mapping_overrides(BASE_MAPPING, overrides)
+        targets = merged["live_sensors"]["targets"]
+        match = next((item for item in targets if item.get("role") == "actual_vpd"), None)
+        assert match is not None
+        assert match.get("entity_id") == "sensor.test_vpd"
+
+
 class TestSecureLogging:
     """Test secure logging functionality"""
 

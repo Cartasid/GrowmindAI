@@ -14,6 +14,7 @@ import { GlassCard } from "./components/GlassCard";
 import { NutrientCalculator } from "./components/NutrientCalculator";
 import { SpectrumAnalyzer } from "./components/SpectrumAnalyzer";
 import { SensorMappingPanel } from "./components/SensorMappingPanel";
+import { useToast } from "./components/ToastProvider";
 import Journal from "./Journal";
 import { useSensorStatus } from "./hooks/useSensorStatus";
 import logo from "./assets/growmind-logo.svg";
@@ -150,6 +151,7 @@ function App() {
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [telemetrySaving, setTelemetrySaving] = useState(false);
+  const { addToast } = useToast();
 
   const activeMeta = sectionMeta[activeSection];
 
@@ -224,9 +226,19 @@ function App() {
       if (!response.ok) {
         throw new Error(`Failed to update telemetry settings (${response.status})`);
       }
+      addToast({
+        title: "Telemetry aktualisiert",
+        description: nextValue ? "Anonym aktiv" : "Deaktiviert",
+        variant: "success",
+      });
     } catch (error) {
       console.error("Telemetry opt-in update failed", error);
       setTelemetryEnabled(!nextValue);
+      addToast({
+        title: "Telemetry fehlgeschlagen",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "error",
+      });
     } finally {
       setTelemetrySaving(false);
     }
@@ -362,6 +374,7 @@ function App() {
                               subtitle="Leaf VPD"
                               icon={<Thermometer className="icon-base icon-lg" />}
                               status={vpd.status}
+                                loading={vpd.loading}
                               value={vpd.value}
                               min={vpd.min}
                               max={vpd.max}
@@ -410,6 +423,7 @@ function App() {
                               subtitle="Substrate moisture"
                               icon={<Waves className="icon-base icon-lg" />}
                               status={vwc.status}
+                              loading={vwc.loading}
                               value={vwc.value}
                               min={vwc.min}
                               max={vwc.max}
@@ -433,6 +447,7 @@ function App() {
                               subtitle="Pore water EC"
                               icon={<Activity className="icon-base icon-lg" />}
                               status={ecp.status}
+                              loading={ecp.loading}
                               value={ecp.value}
                               min={ecp.min}
                               max={ecp.max}

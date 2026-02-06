@@ -13,6 +13,7 @@ interface GlassCardProps {
   max?: number | null;
   alarm?: boolean;
   warnMarginRatio?: number;
+  loading?: boolean;
   children: ReactNode;
 }
 
@@ -49,6 +50,7 @@ export function GlassCard({
   max,
   alarm,
   warnMarginRatio = 0.1,
+  loading = false,
   children,
 }: GlassCardProps) {
   const state = status
@@ -97,7 +99,16 @@ export function GlassCard({
           {rightSlot && <div className="relative">{rightSlot}</div>}
         </header>
       )}
-      <div className="relative mt-6">{children}</div>
+      <div className="relative mt-6">
+        {loading ? (
+          <div className="space-y-3" aria-busy="true">
+            <div className="skeleton h-6 w-2/3 rounded-full" />
+            <div className="skeleton h-4 w-1/2 rounded-full" />
+          </div>
+        ) : (
+          children
+        )}
+      </div>
     </motion.section>
   );
 }

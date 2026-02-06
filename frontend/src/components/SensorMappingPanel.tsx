@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchConfig, updateMapping, type ConfigMap } from "../services/configService";
+import {
+  fetchConfig,
+  fetchMappingOverrides,
+  fetchSystemInfo,
+  importMappingOverrides,
+  updateMapping,
+  type ConfigMap,
+  type MappingOverrides,
+  type SystemInfo,
+} from "../services/configService";
+import { useToast } from "./ToastProvider";
 
 const sectionOrder = ["inputs", "targets"] as const;
 
@@ -10,6 +20,8 @@ export function SensorMappingPanel() {
   const [status, setStatus] = useState<MappingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, string>>({});
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const { addToast } = useToast();
 
   useEffect(() => {
     let active = true;
@@ -24,6 +36,13 @@ export function SensorMappingPanel() {
         if (!active) return;
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
+      });
+    fetchSystemInfo()
+      .then((info) => {
+        if (active) setSystemInfo(info);
+      })
+      .catch(() => {
+        if (active) setSystemInfo(null);
       });
     return () => {
       active = false;
@@ -54,8 +73,50 @@ export function SensorMappingPanel() {
         return next;
       });
       setError(null);
+      addToast({
+        title: "Mapping gespeichert",
+        description: `${role} → ${entity_id || "Standard"}`,
+        variant: "success",
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      addToast({
+        title: "Mapping fehlgeschlagen",
+        description: message,
+        variant: "error",
+      });
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const overrides = await fetchMappingOverrides();
+      const blob = new Blob([JSON.stringify(overrides, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "mapping_overrides.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+      addToast({ title: "Mapping exportiert", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Export fehlgeschlagen", description: message, variant: "error" });
+    }
+  };
+
+  const handleImport = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const overrides = JSON.parse(text) as MappingOverrides;
+      await importMappingOverrides(overrides);
+      const data = await fetchConfig();
+      setConfig(data);
+      addToast({ title: "Mapping importiert", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Import fehlgeschlagen", description: message, variant: "error" });
     }
   };
 
@@ -73,6 +134,35 @@ export function SensorMappingPanel() {
           {status === "loading" ? "Laedt" : status === "error" ? "Fehler" : "Bereit"}
         </span>
       </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-1 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70"
+          onClick={handleExport}
+        >
+          Export
+        </button>
+        <label className="rounded-full border border-white/20 bg-black/30 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/30">
+          Import
+          <input
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(event) => handleImport(event.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+
+      {systemInfo && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-xs text-white/70">
+          <p className="meta-mono text-[10px] text-white/40">SYSTEM</p>
+          <div className="mt-2 space-y-1">
+            <p>GEMINI_SAFETY_THRESHOLD: {systemInfo.gemini_safety_threshold}</p>
+            <p>LOG_FORMAT: {systemInfo.log_format}</p>
+            <p>CORS: {systemInfo.cors_allowed_origins.join(", ") || "(leer)"}</p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 rounded-2xl border border-brand-red/40 bg-brand-red/10 px-4 py-3 text-sm text-brand-red">

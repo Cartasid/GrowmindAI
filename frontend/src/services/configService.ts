@@ -17,6 +17,14 @@ type ConfigCategory = {
 
 export type ConfigMap = Record<string, ConfigCategory>;
 
+export type MappingOverrides = Record<string, Record<string, Record<string, string>>>;
+
+export type SystemInfo = {
+  cors_allowed_origins: string[];
+  gemini_safety_threshold: string;
+  log_format: string;
+};
+
 const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), init);
   if (!response.ok) {
@@ -41,4 +49,21 @@ export const updateMapping = async (payload: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+};
+
+export const fetchMappingOverrides = async (): Promise<MappingOverrides> => {
+  const response = await requestJson<{ overrides: MappingOverrides }>("/api/config/mapping");
+  return response.overrides;
+};
+
+export const importMappingOverrides = async (overrides: MappingOverrides): Promise<void> => {
+  await requestJson<{ status: string }>("/api/config/mapping/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ overrides }),
+  });
+};
+
+export const fetchSystemInfo = async (): Promise<SystemInfo> => {
+  return requestJson<SystemInfo>("/api/system/info");
 };

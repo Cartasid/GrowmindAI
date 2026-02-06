@@ -58,7 +58,7 @@ const fadeUp = {
 };
 
 export function SpectrumAnalyzer() {
-  const { lightingEngine, status } = useLightingEngine();
+  const { lightingEngine, status, connectionStatus } = useLightingEngine();
 
   const targetEntries = Object.entries(lightingEngine.target_spectrum ?? {});
   const hasTargets = targetEntries.some(([key]) => Boolean(TARGET_MAPPING[key]));
@@ -95,7 +95,13 @@ export function SpectrumAnalyzer() {
               status === "ready" ? "bg-brand-cyan shadow-brand-glow animate-glow" : "bg-white/40"
             }`}
           />
-          {status === "ready" ? "Live Feed" : "Synchronisiere"}
+          {connectionStatus === "reconnecting"
+            ? "Reconnecting"
+            : connectionStatus === "error"
+            ? "Verbindung fehlerhaft"
+            : status === "ready"
+            ? "Live Feed"
+            : "Synchronisiere"}
         </div>
       </motion.div>
 

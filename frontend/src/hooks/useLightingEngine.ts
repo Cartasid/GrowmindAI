@@ -78,10 +78,12 @@ function normalizePayload(payload: Partial<LightingPayload> | null | undefined):
 }
 
 type LightingStatus = "idle" | "loading" | "ready" | "error";
+type ConnectionStatus = "connected" | "reconnecting" | "error";
 
 export const useLightingEngine = () => {
   const [data, setData] = useState<LightingPayload>(DEFAULT_LIGHTING);
   const [status, setStatus] = useState<LightingStatus>("loading");
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("reconnecting");
 
   useEffect(() => {
     let isMounted = true;
@@ -98,10 +100,12 @@ export const useLightingEngine = () => {
         if (!isMounted) return;
         setData(normalizePayload(json));
         setStatus("ready");
+        setConnectionStatus("connected");
       } catch (error) {
         console.error("Lighting fetch error", error);
         if (isMounted) {
           setStatus((prevStatus: LightingStatus) => (prevStatus === "ready" ? "ready" : "error"));
+          setConnectionStatus("error");
         }
       }
     };
@@ -112,6 +116,7 @@ export const useLightingEngine = () => {
       socket.onopen = () => {
         // Reset reconnect attempts on successful connection
         reconnectAttempts = 0;
+        if (isMounted) setConnectionStatus("connected");
       };
 
       socket.onmessage = (event) => {
@@ -128,6 +133,7 @@ export const useLightingEngine = () => {
 
       socket.onclose = () => {
         if (!isMounted) return;
+        setConnectionStatus("reconnecting");
         // Exponential backoff with max delay
         reconnectAttempts++;
         const delay = Math.min(
@@ -138,6 +144,7 @@ export const useLightingEngine = () => {
       };
 
       socket.onerror = () => {
+        if (isMounted) setConnectionStatus("error");
         socket?.close();
       };
     };
@@ -156,6 +163,7 @@ export const useLightingEngine = () => {
 
   return {
     lightingEngine: data.lighting_engine,
-    status
+    status,
+    connectionStatus
   };
 };

@@ -1,6 +1,9 @@
 """Secure logging with credential redaction."""
+import json
 import logging
+import os
 import re
+import time
 from typing import List
 
 
@@ -69,3 +72,28 @@ def setup_secure_logging() -> None:
             if isinstance(existing_filter, SecureLoggingFilter):
                 handler.removeFilter(existing_filter)
         handler.addFilter(secure_filter)
+
+
+class JsonFormatter(logging.Formatter):
+    """Format logs as JSON for structured logging."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=True)
+
+
+def setup_log_format() -> None:
+    """Apply JSON formatting when LOG_FORMAT=json is set."""
+    if os.getenv("LOG_FORMAT", "").lower() != "json":
+        return
+    formatter = JsonFormatter()
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        handler.setFormatter(formatter)
