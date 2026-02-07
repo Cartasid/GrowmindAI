@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchConfig, updateConfigValue, type ConfigMap } from "../services/configService";
+import { fetchConfig, runHvacAuto, updateConfigValue, type ConfigMap } from "../services/configService";
 import { fetchAutomations, setAutomationEnabled, type AutomationSummary } from "../services/automationService";
 import { useHaEntity } from "../hooks/useHaEntity";
 import { useToast } from "./ToastProvider";
@@ -239,6 +239,7 @@ export function ControlCenterPanel() {
   const [automations, setAutomations] = useState<AutomationSummary[]>([]);
   const [automationStatus, setAutomationStatus] = useState<PanelStatus>("idle");
   const { addToast } = useToast();
+  const lastAutoErrorRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -288,6 +289,34 @@ export function ControlCenterPanel() {
       window.localStorage.setItem(HVAC_AUTOMATION_STORAGE_KEY, hvacAutomationId);
     }
   }, [hvacAutomationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hvacMode !== "app_auto") return;
+    let active = true;
+
+    const runAuto = async () => {
+      try {
+        await runHvacAuto();
+      } catch (err) {
+        if (!active) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        const now = Date.now();
+        if (now - lastAutoErrorRef.current > 60_000) {
+          lastAutoErrorRef.current = now;
+          addToast({ title: "HVAC Auto Fehler", description: message, variant: "error" });
+        }
+      }
+    };
+
+    runAuto();
+    const timer = window.setInterval(runAuto, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [addToast, hvacMode]);
 
   const keyFor = (category: string, role: string) => `${category}:${role}`;
 

@@ -331,6 +331,20 @@
         "unit": "%"
       },
       {
+        "role": "water_volume",
+        "label": "Water Volume",
+        "entity_id": "sensor.water_volume",
+        "unit": "%",
+        "optional": true
+      },
+      {
+        "role": "water_per_second",
+        "label": "Water Per Second",
+        "entity_id": "sensor.water_per_second",
+        "unit": "ml/s",
+        "optional": true
+      },
+      {
         "role": "actual_ecp",
         "label": "Pore Water EC",
         "entity_id": "sensor.growsensor_porenwasser_ec_berechnet_ecp",

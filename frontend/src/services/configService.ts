@@ -126,3 +126,9 @@ export const updateConfigValue = async (payload: {
     body: JSON.stringify(payload),
   });
 };
+
+export const runHvacAuto = async (): Promise<void> => {
+  await requestJson<{ status: string }>("/api/control/hvac/auto", {
+    method: "POST",
+  });
+};

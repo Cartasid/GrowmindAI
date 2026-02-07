@@ -116,6 +116,9 @@ _warned_missing_alerts = False
 
 IRRIGATION_PULSE_SECONDS = _env_int("IRRIGATION_PULSE_SECONDS", 20, minimum=1)
 IRRIGATION_FLUSH_SECONDS = _env_int("IRRIGATION_FLUSH_SECONDS", 180, minimum=1)
+HVAC_TEMP_TOLERANCE = _env_float("HVAC_TEMP_TOLERANCE", 0.5, minimum=0.0)
+HVAC_HUM_TOLERANCE = _env_float("HVAC_HUM_TOLERANCE", 3.0, minimum=0.0)
+HVAC_MIN_FAN_PERCENT = _env_int("HVAC_MIN_FAN_PERCENT", 30, minimum=0)
 
 _telemetry_task: Optional[asyncio.Task[Any]] = None
 _telemetry_stop: Optional[asyncio.Event] = None
@@ -410,6 +413,43 @@ def _safe_float(value: Optional[str]) -> Optional[float]:
         return result if math.isfinite(result) else None
     except (TypeError, ValueError):
         return None
+
+
+def _find_role_meta(role: str) -> Optional[Dict[str, Any]]:
+    for category in MAPPING.values():
+        if not isinstance(category, dict):
+            continue
+        for section in ("inputs", "targets"):
+            items = category.get(section)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if item.get("role") == role:
+                    return item
+    return None
+
+
+def _resolve_role_value(state_map: Dict[str, Dict[str, Any]], role: str) -> Optional[float]:
+    meta = _find_role_meta(role)
+    if not meta:
+        return None
+    entity_id = meta.get("entity_id")
+    if not entity_id:
+        return None
+    state_obj = state_map.get(entity_id)
+    if not state_obj:
+        return None
+    input_type = meta.get("type")
+    attributes = state_obj.get("attributes") or {}
+    if input_type == "climate_temperature":
+        return _safe_float(attributes.get("temperature"))
+    if input_type == "climate_humidity":
+        return _safe_float(attributes.get("humidity"))
+    if input_type == "humidifier_target":
+        return _safe_float(attributes.get("humidity"))
+    if input_type == "fan_percentage":
+        return _safe_float(attributes.get("percentage"))
+    return _safe_float(state_obj.get("state"))
 
 
 def _coerce_number(value: Any) -> Optional[float]:
@@ -713,6 +753,46 @@ async def _pulse_entity(entity_id: str, seconds: int) -> None:
         await _invoke_service(domain, "turn_off", {"entity_id": entity_id})
 
 
+def _calculate_irrigation_duration_seconds(
+    state_map: Dict[str, Dict[str, Any]],
+    role: str,
+) -> Optional[int]:
+    water_volume = _resolve_role_value(state_map, "water_volume")
+    water_per_second = _resolve_role_value(state_map, "water_per_second")
+    irrigation_amount = _resolve_role_value(state_map, "irrigation_amount")
+
+    if water_volume is None or water_per_second is None:
+        return None
+
+    if role == "flush_run":
+        volume = (water_volume / 100.0) * 30.0
+    else:
+        if irrigation_amount is None:
+            return None
+        volume = (water_volume / 100.0) * irrigation_amount
+
+    duration = volume * water_per_second
+    if not math.isfinite(duration) or duration <= 0:
+        return None
+    return max(1, int(round(duration)))
+
+
+async def _apply_climate_actuator(role: str, value: Any) -> bool:
+    try:
+        input_meta = _find_input("climate_actuators", role)
+    except HTTPException:
+        return False
+    service_call = _build_service_call(input_meta, value)
+    if not service_call:
+        return False
+    await _invoke_service(
+        domain=service_call["domain"],
+        service=service_call["service"],
+        payload=service_call["payload"],
+    )
+    return True
+
+
 @app.get("/api/ha/state/{entity_id}")
 async def read_ha_state(entity_id: str, request: Request) -> Response:
     try:
@@ -840,6 +920,58 @@ async def get_dashboard() -> Dict[str, Any]:
     return await _build_dashboard_payload(state_map)
 
 
+@app.post("/api/control/hvac/auto")
+async def run_hvac_auto() -> Dict[str, Any]:
+    state_map = await _get_states_map()
+    temp_actual = _resolve_role_value(state_map, "actual_temp")
+    temp_target = _resolve_role_value(state_map, "temp_setpoint")
+    hum_actual = _resolve_role_value(state_map, "actual_humidity")
+    hum_target = _resolve_role_value(state_map, "humidity_setpoint")
+
+    temp_ready = temp_actual is not None and temp_target is not None
+    hum_ready = hum_actual is not None and hum_target is not None
+    if not temp_ready and not hum_ready:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing temp/humidity inputs for HVAC auto control",
+        )
+
+    heater_on = temp_ready and temp_actual < (temp_target - HVAC_TEMP_TOLERANCE)
+    ac_on = temp_ready and temp_actual > (temp_target + HVAC_TEMP_TOLERANCE)
+    dehumidifier_on = hum_ready and hum_actual > (hum_target + HVAC_HUM_TOLERANCE)
+    humidifier_on = hum_ready and hum_actual < (hum_target - HVAC_HUM_TOLERANCE)
+
+    fan_current = _resolve_role_value(state_map, "circulation_fan") or 0.0
+    fan_target = max(float(HVAC_MIN_FAN_PERCENT), fan_current)
+
+    actions: Dict[str, bool] = {}
+    if temp_ready:
+        actions["heater_switch"] = await _apply_climate_actuator("heater_switch", heater_on)
+        actions["ac_switch"] = await _apply_climate_actuator("ac_switch", ac_on)
+    if hum_ready:
+        actions["dehumidifier_switch"] = await _apply_climate_actuator("dehumidifier_switch", dehumidifier_on)
+        actions["humidifier_switch"] = await _apply_climate_actuator("humidifier_switch", humidifier_on)
+    actions["circulation_fan"] = await _apply_climate_actuator("circulation_fan", fan_target)
+
+    return {
+        "status": "ok",
+        "inputs": {
+            "temp_actual": temp_actual,
+            "temp_target": temp_target,
+            "hum_actual": hum_actual,
+            "hum_target": hum_target,
+        },
+        "decisions": {
+            "heater_on": heater_on,
+            "ac_on": ac_on,
+            "dehumidifier_on": dehumidifier_on,
+            "humidifier_on": humidifier_on,
+            "fan_target": fan_target,
+        },
+        "actions": actions,
+    }
+
+
 @app.post("/api/config/update")
 async def update_configuration(payload: UpdatePayload):
     if payload.role in {"irrigation_pulse", "flush_run"}:
@@ -866,7 +998,10 @@ async def update_configuration(payload: UpdatePayload):
         pump_entity = pump_meta.get("entity_id")
         if not pump_entity:
             raise HTTPException(status_code=400, detail="No irrigation pump entity configured for pulse/flush")
-        duration = IRRIGATION_FLUSH_SECONDS if payload.role == "flush_run" else IRRIGATION_PULSE_SECONDS
+        state_map = await _get_states_map()
+        duration = _calculate_irrigation_duration_seconds(state_map, payload.role)
+        if duration is None:
+            duration = IRRIGATION_FLUSH_SECONDS if payload.role == "flush_run" else IRRIGATION_PULSE_SECONDS
         asyncio.create_task(_pulse_entity(pump_entity, duration))
         return {"status": "ok"}
 
