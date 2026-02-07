@@ -14,6 +14,7 @@ type MixingInstructionsPanelProps = {
   ppm?: Record<string, number> | null;
   reservoirLiters?: number;
   topDress?: TopDressItem[] | null;
+  descriptions?: Record<string, string>;
 };
 
 const MIX_LABELS: Record<string, { label: string; unit: string }> = {
@@ -24,26 +25,13 @@ const MIX_LABELS: Record<string, { label: string; unit: string }> = {
   kelp: { label: "Kelp", unit: "g" },
   amino: { label: "Amino", unit: "g" },
   fulvic: { label: "Fulvic", unit: "g" },
-  shield: { label: "Shield", unit: "g" },
+  shield: { label: "Silicate / Hypo", unit: "g" },
+  quench: { label: "Quench", unit: "g" },
 };
 
-const MIX_ORDER = ["part_a", "part_b", "part_c", "burst", "kelp", "amino", "fulvic"] as const;
+const MIX_ORDER = ["part_a", "part_b", "part_c", "burst", "kelp", "amino", "fulvic", "quench"] as const;
 
-const ppmKeys = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
-
-const buildNpkRatio = (ppm: Record<string, number> | null | undefined) => {
-  if (!ppm) return "—";
-  const n = ppm.N ?? 0;
-  const p = ppm.P ?? 0;
-  const k = ppm.K ?? 0;
-  const values = [n, p, k].filter((value) => value > 0);
-  if (!values.length) return "—";
-  const divisor = Math.min(...values);
-  if (divisor <= 0) return "—";
-  return `${(n / divisor).toFixed(1)}:${(p / divisor).toFixed(1)}:${(k / divisor).toFixed(1)}`;
-};
-
-export function MixingInstructionsPanel({ mix, ppm, reservoirLiters, topDress }: MixingInstructionsPanelProps) {
+export function MixingInstructionsPanel({ mix, ppm, reservoirLiters, topDress, descriptions }: MixingInstructionsPanelProps) {
   const [open, setOpen] = useState(false);
   const steps = useMemo(() => {
     if (!mix) return [];
@@ -96,7 +84,7 @@ export function MixingInstructionsPanel({ mix, ppm, reservoirLiters, topDress }:
             {allSteps.length ? (
               <ol className="mt-2 space-y-2">
                 {allSteps.map((item, index) => (
-                  <li key={item.key}>
+                  <li key={item.key} title={descriptions?.[item.key]}>
                     {index + 1}. {item.label} einruhren ({item.amount.toFixed(2)} {item.unit})
                   </li>
                 ))}
@@ -111,28 +99,12 @@ export function MixingInstructionsPanel({ mix, ppm, reservoirLiters, topDress }:
               <p className="text-xs uppercase tracking-[0.3em] text-white/40">Top-Dress</p>
               <ul className="mt-2 space-y-1">
                 {topDress.map((item) => (
-                  <li key={item.key}>
+                  <li key={item.key} title={descriptions?.[item.key]}>
                     {item.name}: {item.amount.toFixed(2)} {item.unit || "g"}
                     {item.instruction ? ` · ${item.instruction}` : ""}
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-          {ppm && (
-            <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs uppercase tracking-[0.3em] text-white/40">PPM Profil</p>
-                <span className="text-xs text-white/60">NPK {buildNpkRatio(ppm)}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                {ppmKeys.map((key) => (
-                  <div key={key} className="rounded-xl border border-white/10 bg-black/40 px-2 py-1">
-                    <p className="text-[10px] text-white/40">{key}</p>
-                    <span className="text-sm text-white/90">{(ppm?.[key] ?? 0).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
           <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">

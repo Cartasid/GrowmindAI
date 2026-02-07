@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import type { Cultivar, ManagedPlan, PlanEntry, Substrate } from "../types";
+import type { Cultivar, ManagedPlan, ObservationAdjustments, PlanEntry, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
@@ -37,7 +37,7 @@ const DEFAULT_INPUTS: PlanInputs = {
   reservoir: 100,
 };
 
-const MIX_ORDER = ["part_a", "part_b", "part_c", "burst", "kelp", "amino", "fulvic"] as const;
+const MIX_ORDER = ["part_a", "part_b", "part_c", "burst", "kelp", "amino", "fulvic", "quench"] as const;
 type ValueEvent = { target: { value: string } };
 type TopDressItem = NonNullable<MixResponse["top_dress"]>[number];
 type InventoryAlertItem = InventoryResponse["alerts"][number];
@@ -52,6 +52,54 @@ const fadeUp = {
   hidden: { opacity: 0, y: 12 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } }
 };
+
+const DEFAULT_OBSERVATIONS = {
+  ecTrend: "neutral",
+  phDrift: "normal",
+  tipburn: "none",
+  pale: "none",
+  caMgDeficiency: "none",
+  claw: "none",
+} as const;
+
+const DEFAULT_OBSERVATION_ADJUSTMENTS: ObservationAdjustments = {
+  ecTrend: { low: 0, high: 0 },
+  phDrift: { up: 0, down: 0 },
+  tipburn: { mild: 0, strong: 0 },
+  pale: { mild: 0, strong: 0 },
+  caMgDeficiency: { mild: 0, strong: 0 },
+  claw: { mild: 0, strong: 0 },
+};
+
+const OBSERVATION_EDIT_FIELDS = [
+  { key: "ecTrend", label: "EC-Trend", options: [
+    { key: "low", label: "Niedrig" },
+    { key: "high", label: "Hoch" },
+  ] },
+  { key: "phDrift", label: "pH-Drift", options: [
+    { key: "down", label: "Drift runter" },
+    { key: "up", label: "Drift hoch" },
+  ] },
+  { key: "tipburn", label: "Spitzenbrand", options: [
+    { key: "mild", label: "Leicht" },
+    { key: "strong", label: "Stark" },
+  ] },
+  { key: "pale", label: "Stark aufgehellt", options: [
+    { key: "mild", label: "Leicht" },
+    { key: "strong", label: "Stark" },
+  ] },
+  { key: "caMgDeficiency", label: "Ca/Mg-Mangel", options: [
+    { key: "mild", label: "Leicht" },
+    { key: "strong", label: "Stark" },
+  ] },
+  { key: "claw", label: "Adlerkralle", options: [
+    { key: "mild", label: "Leicht" },
+    { key: "strong", label: "Stark" },
+  ] },
+] as const;
+
+const formatDate = (value: Date) =>
+  value.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
 
 const ppmKeys = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
 
@@ -84,6 +132,8 @@ export function NutrientCalculator() {
   const [editorPlan, setEditorPlan] = useState<EditablePlan | null>(null);
   const [planSaving, setPlanSaving] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
+  const [autoPhase, setAutoPhase] = useState(true);
+  const [observations, setObservations] = useState({ ...DEFAULT_OBSERVATIONS });
   const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
   const [inventorySetInput, setInventorySetInput] = useState<Record<string, string>>({});
   const { addToast } = useToast();
@@ -146,16 +196,79 @@ export function NutrientCalculator() {
     };
   }, []);
 
+  const mixDescriptions = useMemo(() => {
+    if (!inventory?.inventory) return {} as Record<string, string>;
+    return Object.entries(inventory.inventory).reduce((acc, [key, value]) => {
+      if (value.description) acc[key] = value.description;
+      return acc;
+    }, {} as Record<string, string>);
+  }, [inventory]);
+
   const selectedPlan = useMemo(() => {
     if (!plans.length) return null;
     return plans.find((plan: ManagedPlan) => plan.id === selectedPlanId) ?? plans[0];
   }, [plans, selectedPlanId]);
+
+  const observationAdjustments = useMemo(
+    () => selectedPlan?.observationAdjustments ?? DEFAULT_OBSERVATION_ADJUSTMENTS,
+    [selectedPlan]
+  );
+
+  const schedule = useMemo(() => {
+    if (!selectedPlan?.plan || !selectedPlan.startDate) return [] as Array<{
+      phase: string;
+      start: Date;
+      end: Date;
+      label: string;
+    }>;
+    const startDate = new Date(`${selectedPlan.startDate}T00:00:00`);
+    if (Number.isNaN(startDate.getTime())) return [];
+    let cursor = new Date(startDate);
+    const rows = selectedPlan.plan.map((entry) => {
+      const duration = entry.durationDays ?? 7;
+      const start = new Date(cursor);
+      const end = new Date(cursor);
+      end.setDate(end.getDate() + Math.max(1, duration) - 1);
+      cursor.setDate(cursor.getDate() + Math.max(1, duration));
+      return {
+        phase: entry.phase,
+        start,
+        end,
+        label: `${formatDate(start)} – ${formatDate(end)}`,
+      };
+    });
+    if (rows.length) {
+      const lastEnd = rows[rows.length - 1].end;
+      const harvest = new Date(lastEnd);
+      harvest.setDate(harvest.getDate() + 1);
+      rows.push({
+        phase: "Ernte",
+        start: harvest,
+        end: harvest,
+        label: formatDate(harvest),
+      });
+    }
+    return rows;
+  }, [selectedPlan]);
+
+  const currentPhase = useMemo(() => {
+    if (!schedule.length) return null;
+    const today = new Date();
+    return schedule.find((item) => today >= item.start && today <= item.end)?.phase ?? null;
+  }, [schedule]);
 
   const cloneEntries = (planEntries: PlanEntry[]) =>
     planEntries.map((entry) => ({
       ...entry,
       notes: entry.notes ? [...entry.notes] : undefined,
     }));
+
+  const normalizeAdjustments = (plan: ManagedPlan): ObservationAdjustments => {
+    return {
+      ...DEFAULT_OBSERVATION_ADJUSTMENTS,
+      ...(plan.observationAdjustments ?? {}),
+    };
+  };
 
   const buildDraftFromPlan = (plan: ManagedPlan, overrides?: Partial<EditablePlan>): EditablePlan => ({
     id: undefined,
@@ -164,6 +277,8 @@ export function NutrientCalculator() {
     plan: cloneEntries(plan.plan),
     waterProfile: { ...plan.waterProfile },
     osmosisShare: plan.osmosisShare,
+    startDate: plan.startDate ?? "",
+    observationAdjustments: normalizeAdjustments(plan),
     isDefault: false,
     ...overrides,
   });
@@ -182,7 +297,16 @@ export function NutrientCalculator() {
     }
   }, [phaseOptions, inputs.phase]);
 
+  useEffect(() => {
+    if (!autoPhase || !currentPhase) return;
+    if (currentPhase === inputs.phase) return;
+    setInputs((prev: PlanInputs) => ({ ...prev, phase: currentPhase }));
+  }, [autoPhase, currentPhase, inputs.phase]);
+
   const handleInputChange = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
+    if (key === "phase") {
+      setAutoPhase(false);
+    }
     setInputs((prev: PlanInputs) => ({ ...prev, [key]: value }));
   };
 
@@ -213,6 +337,8 @@ export function NutrientCalculator() {
         reservoir_liters: inputs.reservoir,
         cultivar,
         substrate,
+        plan_id: selectedPlanId || undefined,
+        observations: observations as Record<string, string>,
       });
       setResult(response);
     } catch (err) {
@@ -252,6 +378,8 @@ export function NutrientCalculator() {
         reservoir_liters: inputs.reservoir,
         cultivar,
         substrate,
+        plan_id: selectedPlanId || undefined,
+        observations: observations as Record<string, string>,
       });
       setResult(response);
       setInventory({
@@ -331,6 +459,20 @@ export function NutrientCalculator() {
       if (!prev) return prev;
       const updated = prev.plan.map((entry, idx) => (idx === index ? { ...entry, [key]: value } : entry));
       return { ...prev, plan: updated };
+    });
+  };
+
+  const updateAdjustmentField = (key: keyof ObservationAdjustments, option: string, value: number) => {
+    setEditorPlan((prev) => {
+      if (!prev) return prev;
+      const nextAdjustments = {
+        ...DEFAULT_OBSERVATION_ADJUSTMENTS,
+        ...(prev.observationAdjustments ?? {}),
+      } as ObservationAdjustments;
+      const current = { ...(nextAdjustments[key] ?? {}) } as Record<string, number>;
+      current[option] = value;
+      nextAdjustments[key] = current as any;
+      return { ...prev, observationAdjustments: nextAdjustments };
     });
   };
 
@@ -465,6 +607,101 @@ export function NutrientCalculator() {
                   </div>
                 </div>
               )}
+              <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/40">Beobachtungen</p>
+                <div className="mt-3 space-y-3 text-xs text-white/60">
+                  <label className="block">
+                    EC-Trend
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.ecTrend}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, ecTrend: event.target.value as any }))
+                      }
+                    >
+                      <option value="low" className="bg-[#070a16]">Fallen</option>
+                      <option value="neutral" className="bg-[#070a16]">Neutral</option>
+                      <option value="high" className="bg-[#070a16]">Steigend</option>
+                    </select>
+                    <p className="mt-1 text-[11px] text-white/50">
+                      Wie hat sich der EC-Wert in den letzten 24h veraendert?
+                    </p>
+                  </label>
+                  <label className="block">
+                    pH-Drift
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.phDrift}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, phDrift: event.target.value as any }))
+                      }
+                    >
+                      <option value="down" className="bg-[#070a16]">Nach unten</option>
+                      <option value="normal" className="bg-[#070a16]">Normal</option>
+                      <option value="up" className="bg-[#070a16]">Nach oben</option>
+                    </select>
+                    <p className="mt-1 text-[11px] text-white/50">
+                      Drift nach oben/unten kann auf Probleme hinweisen.
+                    </p>
+                  </label>
+                  <label className="block">
+                    Spitzenbrand
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.tipburn}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, tipburn: event.target.value as any }))
+                      }
+                    >
+                      <option value="none" className="bg-[#070a16]">Nein</option>
+                      <option value="mild" className="bg-[#070a16]">Leicht</option>
+                      <option value="strong" className="bg-[#070a16]">Stark</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    Stark aufgehellt
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.pale}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, pale: event.target.value as any }))
+                      }
+                    >
+                      <option value="none" className="bg-[#070a16]">Nein</option>
+                      <option value="mild" className="bg-[#070a16]">Leicht</option>
+                      <option value="strong" className="bg-[#070a16]">Stark</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    Ca/Mg-Mangel
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.caMgDeficiency}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, caMgDeficiency: event.target.value as any }))
+                      }
+                    >
+                      <option value="none" className="bg-[#070a16]">Nein</option>
+                      <option value="mild" className="bg-[#070a16]">Leicht</option>
+                      <option value="strong" className="bg-[#070a16]">Stark</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    Adlerkralle
+                    <select
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                      value={observations.claw}
+                      onChange={(event: ValueEvent) =>
+                        setObservations((prev) => ({ ...prev, claw: event.target.value as any }))
+                      }
+                    >
+                      <option value="none" className="bg-[#070a16]">Nein</option>
+                      <option value="mild" className="bg-[#070a16]">Leicht</option>
+                      <option value="strong" className="bg-[#070a16]">Stark</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -521,6 +758,54 @@ export function NutrientCalculator() {
 
         <motion.div variants={fadeUp} className="space-y-6">
           <motion.div variants={fadeUp} className="glass-panel rounded-3xl p-5 shadow-neon sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-white/50">Wochenplan</p>
+                <p className="mt-2 text-sm text-white/60">
+                  {selectedPlan?.startDate
+                    ? `Startdatum: ${selectedPlan.startDate}`
+                    : "Kein Startdatum hinterlegt."}
+                </p>
+              </div>
+              <button
+                className={`rounded-full border px-3 py-1 text-[10px] ${
+                  autoPhase
+                    ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+                    : "border-white/10 bg-black/40 text-white/70"
+                }`}
+                onClick={() => setAutoPhase((prev) => !prev)}
+              >
+                {autoPhase ? "Auto aktiv" : "Auto aus"}
+              </button>
+            </div>
+            {schedule.length ? (
+              <div className="mt-4 grid gap-2">
+                {schedule.map((item) => (
+                  <div
+                    key={item.phase}
+                    className={`flex items-center justify-between rounded-2xl border px-3 py-2 text-xs ${
+                      currentPhase === item.phase
+                        ? "border-brand-cyan/40 bg-brand-cyan/10 text-white"
+                        : "border-white/10 bg-black/30 text-white/70"
+                    }`}
+                  >
+                    <span>{item.phase}</span>
+                    <div className="flex items-center gap-2">
+                      <span>{item.label}</span>
+                      {currentPhase === item.phase && (
+                        <span className="rounded-full border border-grow-lime/40 bg-grow-lime/10 px-2 py-0.5 text-[10px] text-grow-lime">
+                          Aktuell
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-xs text-white/50">Startdatum im Plan setzen, um den Wochenplan zu sehen.</p>
+            )}
+          </motion.div>
+          <motion.div variants={fadeUp} className="glass-panel rounded-3xl p-5 shadow-neon sm:p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">Ergebnis</p>
             {result ? (
               <div className="mt-4 space-y-6">
@@ -566,9 +851,10 @@ export function NutrientCalculator() {
                         const item = inventory?.inventory?.[key];
                         const unit = item?.unit || (key === "amino" || key === "fulvic" ? "ml" : "g");
                         const label = item?.name || key;
+                        const description = item?.description;
                         return (
                           <tr key={key} className="border-t border-white/5">
-                            <td className="px-4 py-2 text-white">{label}</td>
+                            <td className="px-4 py-2 text-white" title={description}>{label}</td>
                             <td className="px-4 py-2 text-right text-white/80">
                               {result.mix[key].toFixed(2)} {unit}
                             </td>
@@ -609,6 +895,7 @@ export function NutrientCalculator() {
               ppm={result?.ppm}
               reservoirLiters={inputs.reservoir}
               topDress={result?.top_dress}
+              descriptions={mixDescriptions}
             />
           </motion.div>
 
@@ -723,6 +1010,15 @@ export function NutrientCalculator() {
                 />
               </label>
               <label className="text-sm text-white/70">
+                Startdatum
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  type="date"
+                  value={editorPlan.startDate || ""}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => updateDraftField("startDate", event.target.value)}
+                />
+              </label>
+              <label className="text-sm text-white/70">
                 Osmose-Anteil (0-1)
                 <input
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
@@ -747,6 +1043,42 @@ export function NutrientCalculator() {
               </label>
             </div>
 
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">Beobachtungen (% Anpassung)</p>
+              <p className="mt-2 text-xs text-white/60">Pro Auswahl wird A/X/BZ pro Liter angepasst.</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {OBSERVATION_EDIT_FIELDS.map((field) => (
+                  <div key={field.key} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                    <p className="text-xs text-white/70">{field.label}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {field.options.map((option) => (
+                        <label key={option.key} className="text-[11px] text-white/60">
+                          {option.label}
+                          <input
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-white"
+                            type="number"
+                            step={0.1}
+                            value={
+                              (editorPlan.observationAdjustments as Record<string, Record<string, number>> | undefined)?.[
+                                field.key
+                              ]?.[option.key] ?? 0
+                            }
+                            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                              updateAdjustmentField(
+                                field.key as keyof ObservationAdjustments,
+                                option.key,
+                                Number(event.target.value) || 0
+                              )
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="mt-6 flex items-center justify-between">
               <p className="text-xs uppercase tracking-[0.3em] text-white/50">Plan-Phasen</p>
               <button
@@ -768,10 +1100,10 @@ export function NutrientCalculator() {
                     <th className="px-3 py-2 text-right">pH</th>
                     <th className="px-3 py-2 text-right">EC</th>
                     <th className="px-3 py-2 text-right">Tage</th>
-                    <th className="px-3 py-2 text-right">Tide</th>
-                    <th className="px-3 py-2 text-right">Helix</th>
-                    <th className="px-3 py-2 text-right">Ligand</th>
-                    <th className="px-3 py-2 text-right">Silicate</th>
+                    <th className="px-3 py-2 text-right" title={mixDescriptions.kelp}>Tide</th>
+                    <th className="px-3 py-2 text-right" title={mixDescriptions.amino}>Helix</th>
+                    <th className="px-3 py-2 text-right" title={mixDescriptions.fulvic}>Ligand</th>
+                    <th className="px-3 py-2 text-right" title={mixDescriptions.shield}>Silicate/Hypo</th>
                     <th className="px-3 py-2 text-right">Aktion</th>
                   </tr>
                 </thead>

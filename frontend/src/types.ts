@@ -29,6 +29,15 @@ export interface PlanEntry {
   notes?: string[];
 }
 
+export interface ObservationAdjustments {
+  ecTrend?: { low?: number; high?: number };
+  phDrift?: { up?: number; down?: number };
+  tipburn?: { mild?: number; strong?: number };
+  pale?: { mild?: number; strong?: number };
+  caMgDeficiency?: { mild?: number; strong?: number };
+  claw?: { mild?: number; strong?: number };
+}
+
 export interface NutrientProfile {
   N?: number;
   P?: number;
@@ -53,6 +62,8 @@ export interface ManagedPlan {
   plan: PlanEntry[];
   waterProfile: NutrientProfile;
   osmosisShare: number;
+  startDate?: string;
+  observationAdjustments?: ObservationAdjustments;
   isDefault?: boolean;
 }
 

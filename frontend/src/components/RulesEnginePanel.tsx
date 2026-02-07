@@ -223,7 +223,9 @@ export function RulesEnginePanel() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-white/50">Rules Engine</p>
-          <h2 className="gradient-text mt-1 text-2xl font-light">Automationsregeln</h2>
+          <h2 className="gradient-text mt-1 texWenn du willst, passe ich als Nächstes die Beobachtungs‑Texte und Standard‑Prozentwerte an deine gewünschten Richtwerte (z.B. EC‑Trend „steigend“ = -5%).
+
+light">Automationsregeln</h2>
           <p className="mt-2 text-sm text-white/60">Human-readable Regeln fuer Klima, Licht und Bewaesserung.</p>
         </div>
         <span className="brand-chip normal-case text-[10px]">{loading ? "Laedt" : "Bereit"}</span>

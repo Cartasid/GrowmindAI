@@ -693,13 +693,22 @@
     },
     "additives": {
       "shield": {
-        "name": "Shield (Silica)",
+        "name": "Silicate / Hypo",
         "unit": "g",
         "full_size": 100,
         "threshold_warn": 10,
         "threshold_warn_percent": 10,
         "role": "structure",
-        "description": "Silikat (Top Dress, 4g/Pflanze in W1). One-Shot."
+        "description": "Silicate-Topdress (4g/Pflanze). Um die Pflanze verteilen."
+      },
+      "quench": {
+        "name": "Quench",
+        "unit": "g",
+        "full_size": 100,
+        "threshold_warn": 10,
+        "threshold_warn_percent": 10,
+        "role": "ripen",
+        "description": "Nur in der letzten Bluetewoche (0.3 g/L)."
       },
       "kelp": {
         "name": "Coast (Kelp)",

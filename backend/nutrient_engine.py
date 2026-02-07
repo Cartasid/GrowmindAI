@@ -86,9 +86,16 @@ def _add_ppm(target: Dict[str, float], profile: Dict[str, float], multiplier: fl
 # ---------------------------------------------------------------------------
 
 class NutrientCalculator:
-    def __init__(self, *, substrate: str | None = None, plan_entries: Optional[List[Dict[str, Any]]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        substrate: str | None = None,
+        plan_entries: Optional[List[Dict[str, Any]]] = None,
+        plan_adjustments: Optional[Dict[str, Dict[str, float]]] = None,
+    ) -> None:
         self.substrate = substrate or os.getenv("NUTRIENT_PLAN_SUBSTRATE", "coco")
         self._plan_entries = self._load_plan_entries(self.substrate, plan_entries)
+        self._plan_adjustments = plan_adjustments or {}
         self._inventory_config = self._load_inventory_config()
         self._seed_inventory()
 
@@ -163,20 +170,11 @@ class NutrientCalculator:
             return "ripen" if week >= 10 else "flower"
         return "veg"
 
-    def preview_plan(self, week_key: str, liters: float) -> Dict[str, Any]:
+    def preview_plan(self, week_key: str, liters: float, observations: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         phase = self._normalize_phase(week_key)
-        mix = self._calculate_mix_raw(phase, liters)
+        mix, top_dress = self._calculate_mix_raw(phase, liters, observations)
 
-        tank_mix = {k: v for k, v in mix.items() if k != "shield"}
-        top_dress = []
-        if mix.get("shield", 0) > 0:
-            top_dress.append({
-                "key": "shield",
-                "name": self._inventory_config.get("shield", {}).get("name", "Shield"),
-                "amount": mix["shield"],
-                "unit": "g",
-                "instruction": "Um den Stamm streuen (nicht in den Tank)."
-            })
+        tank_mix = {k: v for k, v in mix.items() if k not in {"shield"}}
 
         return {
             "mix": tank_mix,
@@ -184,15 +182,21 @@ class NutrientCalculator:
             "ppm": self._calculate_ppm(phase, 1.0) # Base PPM per L
         }
 
-    def _calculate_mix_raw(self, phase: str, liters: float) -> Dict[str, float]:
+    def _calculate_mix_raw(
+        self,
+        phase: str,
+        liters: float,
+        observations: Optional[Dict[str, str]] = None,
+    ) -> tuple[Dict[str, float], List[Dict[str, Any]]]:
         entry = self._plan_entries.get(phase)
         if not entry:
             raise ValueError(f"Unknown phase '{phase}'")
 
         stage = self._resolve_stage(phase)
-        a_per_l = float(entry.get("A") or 0.0)
-        x_per_l = float(entry.get("X") or 0.0)
-        bz_per_l = float(entry.get("BZ") or 0.0)
+        adjustment = self._calculate_observation_adjustment(observations)
+        a_per_l = float(entry.get("A") or 0.0) * adjustment
+        x_per_l = float(entry.get("X") or 0.0) * adjustment
+        bz_per_l = float(entry.get("BZ") or 0.0) * adjustment
 
         mix = {
             "part_a": _round2(a_per_l * liters) if stage != "ripen" else 0.0,
@@ -204,10 +208,12 @@ class NutrientCalculator:
             "fulvic": _round2(float(entry.get("Ligand") or 0.0) * liters),
         }
 
-        if phase == "W1" or phase == "Mid Veg":
-             mix["shield"] = 4.0 # Standard dose
+        last_flower_week = self._last_flower_week()
+        if last_flower_week and phase == last_flower_week:
+            mix["quench"] = _round2(0.3 * liters)
 
-        return mix
+        top_dress = self._build_top_dress(entry)
+        return mix, top_dress
 
     def _calculate_ppm(self, phase: str, dose_factor: float) -> Dict[str, float]:
         entry = self._plan_entries.get(phase)
@@ -225,15 +231,67 @@ class NutrientCalculator:
         _add_ppm(ppm, PROF_BURST, float(entry.get("BZ") or 0.0) * dose_factor)
         return {k: round(v, 2) for k, v in ppm.items()}
 
-    def mix_tank(self, week_key: str, liters: float) -> Dict[str, Any]:
-        result = self.preview_plan(week_key, liters)
+    def mix_tank(self, week_key: str, liters: float, observations: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        result = self.preview_plan(week_key, liters, observations)
         self.consume_mix(result["mix"])
-        if result["top_dress"]:
-            self.consume_mix({"shield": result["top_dress"][0]["amount"]})
+        for item in result.get("top_dress") or []:
+            if item.get("unit") == "g":
+                self.consume_mix({item.get("key", ""): float(item.get("amount") or 0.0)})
 
         inventory = self.get_stock_status()
         alerts = self.check_refill_needed()
         return {**result, "inventory": inventory, "alerts": alerts}
+
+    def _last_flower_week(self) -> Optional[str]:
+        weeks = []
+        for phase in self._plan_entries.keys():
+            match = re.match(r"^W(\d+)$", str(phase), re.IGNORECASE)
+            if match:
+                weeks.append((int(match.group(1)), phase))
+        if not weeks:
+            return None
+        return sorted(weeks, key=lambda item: item[0])[-1][1]
+
+    def _build_top_dress(self, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+        top_dress = []
+        silicate = entry.get("Silicate")
+        try:
+            silicate_value = float(silicate) if silicate is not None else 0.0
+        except (TypeError, ValueError):
+            silicate_value = 0.0
+        if silicate_value > 0:
+            unit = entry.get("SilicateUnit") or "per_liter"
+            if unit == "per_plant":
+                top_dress.append({
+                    "key": "shield",
+                    "name": self._inventory_config.get("shield", {}).get("name", "Silicate"),
+                    "amount": silicate_value,
+                    "unit": "g/Pfl.",
+                    "instruction": "Pro Pflanze anwenden. Silicate-Topdress um die Pflanze verteilen.",
+                })
+            else:
+                top_dress.append({
+                    "key": "shield",
+                    "name": self._inventory_config.get("shield", {}).get("name", "Silicate"),
+                    "amount": silicate_value,
+                    "unit": "g",
+                    "instruction": "In Wasser einruehren oder um den Stamm streuen.",
+                })
+        return top_dress
+
+    def _calculate_observation_adjustment(self, observations: Optional[Dict[str, str]]) -> float:
+        if not observations:
+            return 1.0
+        adjustment = 0.0
+        for key, option in observations.items():
+            if option in {"neutral", "normal", "none"}:
+                continue
+            options = self._plan_adjustments.get(key) or {}
+            try:
+                adjustment += float(options.get(option, 0.0))
+            except (TypeError, ValueError):
+                continue
+        return max(0.0, 1.0 + adjustment / 100.0)
 
     def consume_mix(self, mix: Dict[str, float]):
         current = db.fetch_inventory()

@@ -36,6 +36,15 @@ DEFAULT_OSMOSIS_SHARES: Dict[SubstrateLiteral, float] = {
     "soil": 0.20,
 }
 
+DEFAULT_OBSERVATION_ADJUSTMENTS: Dict[str, Dict[str, float]] = {
+    "ecTrend": {"low": 0.0, "high": 0.0},
+    "phDrift": {"up": 0.0, "down": 0.0},
+    "tipburn": {"mild": 0.0, "strong": 0.0},
+    "pale": {"mild": 0.0, "strong": 0.0},
+    "caMgDeficiency": {"mild": 0.0, "strong": 0.0},
+    "claw": {"mild": 0.0, "strong": 0.0},
+}
+
 PLANS_COLLECTION = "plans"
 CUSTOM_PLANS_KEY = "customPlans"
 ACTIVE_PLAN_KEY = "activePlanIds"
@@ -83,6 +92,8 @@ class ManagedPlanPayload(BaseModel):
     plan: List[PlanEntryPayload] = Field(..., max_length=50)  # Max 50 entries per plan
     waterProfile: Optional[NutrientProfilePayload] = None
     osmosisShare: Optional[float] = None
+    startDate: Optional[str] = None
+    observationAdjustments: Optional[Dict[str, Any]] = None
     isDefault: Optional[bool] = False
 
 
@@ -209,6 +220,10 @@ def _clone_plan_template(template: Dict[str, Any], overrides: Optional[Dict[str,
         "plan": _clone_entries(base_plan),
         "waterProfile": deepcopy(overrides.get("waterProfile") or template["waterProfile"]),
         "osmosisShare": overrides.get("osmosisShare", template["osmosisShare"]),
+        "startDate": overrides.get("startDate") or template.get("startDate"),
+        "observationAdjustments": deepcopy(
+            overrides.get("observationAdjustments") or template.get("observationAdjustments") or DEFAULT_OBSERVATION_ADJUSTMENTS
+        ),
         "id": overrides.get("id", template["id"]),
         "isDefault": overrides.get("isDefault", template.get("isDefault", True)),
     }
@@ -415,6 +430,37 @@ def _sanitize_duration(value: Optional[int]) -> int:
     return max(1, numeric)
 
 
+def _sanitize_date(value: Optional[str]) -> Optional[str]:
+    if not value or not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    try:
+        parts = cleaned.split("T", 1)[0]
+        year, month, day = parts.split("-", 2)
+        normalized = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+        return normalized
+    except (ValueError, TypeError):
+        return None
+
+
+def _sanitize_observation_adjustments(value: Any) -> Dict[str, Dict[str, float]]:
+    if not isinstance(value, dict):
+        return deepcopy(DEFAULT_OBSERVATION_ADJUSTMENTS)
+    normalized = deepcopy(DEFAULT_OBSERVATION_ADJUSTMENTS)
+    for key, options in normalized.items():
+        raw_options = value.get(key)
+        if not isinstance(raw_options, dict):
+            continue
+        for option_key in options.keys():
+            raw_value = raw_options.get(option_key)
+            numeric = _sanitize_float(raw_value)
+            if numeric is not None:
+                options[option_key] = numeric
+    return normalized
+
+
 def _sanitize_float(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -479,6 +525,8 @@ def _normalize_plan(plan_payload: ManagedPlanPayload, substrate: SubstrateLitera
         "plan": normalized_entries,
         "waterProfile": _sanitize_water_profile(plan_payload.waterProfile.model_dump() if plan_payload.waterProfile else None),
         "osmosisShare": _clamp_share(plan_payload.osmosisShare, substrate),
+        "startDate": _sanitize_date(plan_payload.startDate),
+        "observationAdjustments": _sanitize_observation_adjustments(plan_payload.observationAdjustments),
         "isDefault": bool(plan_payload.isDefault),
     }
 
@@ -568,6 +616,16 @@ def get_active_plan_id_for(cultivar: CultivarLiteral, substrate: SubstrateLitera
 def get_active_plan_for(cultivar: CultivarLiteral, substrate: SubstrateLiteral) -> Dict[str, Any]:
     """Public helper for other modules to resolve the active plan payload."""
     return _get_active_plan(cultivar, substrate)
+
+
+def get_plan_by_id_for(cultivar: CultivarLiteral, substrate: SubstrateLiteral, plan_id: str) -> Dict[str, Any]:
+    """Resolve a specific plan by id for other modules (default or custom)."""
+    if plan_id == "default":
+        return _get_default_plan(cultivar, substrate)
+    for plan in _list_custom_plans(cultivar, substrate):
+        if plan.get("id") == plan_id:
+            return plan
+    raise HTTPException(status_code=404, detail=f"Plan '{plan_id}' not found for combo")
 
 
 @router.get("/default")

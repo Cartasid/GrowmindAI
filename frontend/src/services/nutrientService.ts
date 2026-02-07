@@ -6,6 +6,8 @@ export interface MixRequest {
   reservoir_liters: number;
   cultivar?: string;
   substrate?: Substrate;
+  plan_id?: string;
+  observations?: Record<string, string>;
 }
 
 export interface TopDressItem {
@@ -65,17 +67,11 @@ const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
 };
 
 export const fetchNutrientPlan = async (payload: MixRequest): Promise<MixResponse> => {
-  const query = new URLSearchParams({
-    current_week: payload.current_week,
-    reservoir_liters: String(payload.reservoir_liters),
+  return requestJson<MixResponse>("/api/nutrients/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
-  if (payload.cultivar) {
-    query.set("cultivar", payload.cultivar);
-  }
-  if (payload.substrate) {
-    query.set("substrate", payload.substrate);
-  }
-  return requestJson<MixResponse>(`/api/nutrients/plan?${query.toString()}`);
 };
 
 export const fetchInventory = async (): Promise<InventoryResponse> => {
