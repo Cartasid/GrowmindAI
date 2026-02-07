@@ -59,6 +59,8 @@ export interface ManagedPlan {
   id: string;
   name: string;
   description?: string;
+  cultivarInfo?: string;
+  substrateInfo?: string;
   plan: PlanEntry[];
   waterProfile: NutrientProfile;
   osmosisShare: number;

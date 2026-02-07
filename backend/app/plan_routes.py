@@ -20,7 +20,7 @@ SubstrateLiteral = Literal["coco", "soil", "rockwool"]
 
 NUTRIENT_KEYS = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"]
 DEFAULT_WATER_PROFILE: Dict[str, float] = {
-    "N": 0.05 * 14.0067 / 18.038,
+    "N": 0.038825534981705295,
     "Ca": 65.8,
     "Mg": 31.8,
     "K": 1.8,
@@ -89,6 +89,8 @@ class ManagedPlanPayload(BaseModel):
     id: Optional[str] = None
     name: str = Field(..., max_length=100)
     description: Optional[str] = Field("", max_length=1000)
+    cultivarInfo: Optional[str] = Field("", max_length=100)
+    substrateInfo: Optional[str] = Field("", max_length=100)
     plan: List[PlanEntryPayload] = Field(..., max_length=50)  # Max 50 entries per plan
     waterProfile: Optional[NutrientProfilePayload] = None
     osmosisShare: Optional[float] = None
@@ -122,6 +124,7 @@ BASE_PLAN_TEMPLATES: Dict[SubstrateLiteral, Dict[str, Any]] = {
         "id": "default",
         "name": "Default Plan",
         "description": "PhotonFlux baseline schedule for coco.",
+        "substrateInfo": "Coco",
         "plan": _clone_entries([
             {"phase": "Early Veg", "A": 0.8, "X": 0.8, "BZ": 0.00, "pH": "5.7–5.9", "EC": "1.7", "Tide": 0.30, "Helix": 0.02, "Ligand": 0.02, "durationDays": 4},
             {"phase": "Mid Veg", "A": 1.0, "X": 1.0, "BZ": 0.00, "pH": "5.7–5.9", "EC": "1.9", "Tide": 0.30, "Helix": 0.02, "Ligand": 0.02, "Silicate": 4, "SilicateUnit": "per_plant", "notes": ["silicate_mid_veg_note"], "durationDays": 5},
@@ -145,6 +148,7 @@ BASE_PLAN_TEMPLATES: Dict[SubstrateLiteral, Dict[str, Any]] = {
         "id": "default",
         "name": "Default Plan",
         "description": "PhotonFlux baseline schedule for soil.",
+        "substrateInfo": "Erde",
         "plan": _clone_entries([
             {"phase": "Early Veg", "A": 0.7, "X": 0.25, "BZ": 0.00, "pH": "5.8–6.2", "EC": "1.7", "Tide": 0.20, "Helix": 0.02, "Ligand": 0.02, "durationDays": 7},
             {"phase": "Mid Veg", "A": 0.9, "X": 0.28, "BZ": 0.00, "pH": "5.8–6.2", "EC": "1.9", "Tide": 0.20, "Helix": 0.02, "Ligand": 0.02, "Silicate": 4, "SilicateUnit": "per_plant", "notes": ["silicate_mid_veg_note"], "durationDays": 7},
@@ -168,6 +172,7 @@ BASE_PLAN_TEMPLATES: Dict[SubstrateLiteral, Dict[str, Any]] = {
         "id": "default",
         "name": "Default Plan",
         "description": "PhotonFlux baseline schedule for rockwool.",
+        "substrateInfo": "Steinwolle",
         "plan": _clone_entries([
             {"phase": "Early Veg", "A": 0.7, "X": 0.25, "BZ": 0.00, "pH": "5.6–5.8", "EC": "1.7", "Tide": 0.30, "Helix": 0.02, "Ligand": 0.02, "durationDays": 7},
             {"phase": "Mid Veg", "A": 0.9, "X": 0.28, "BZ": 0.00, "pH": "5.6–5.8", "EC": "1.9", "Tide": 0.30, "Helix": 0.02, "Ligand": 0.02, "Silicate": 4, "SilicateUnit": "per_plant", "notes": ["silicate_mid_veg_note"], "durationDays": 7},
@@ -221,6 +226,8 @@ def _clone_plan_template(template: Dict[str, Any], overrides: Optional[Dict[str,
         "waterProfile": deepcopy(overrides.get("waterProfile") or template["waterProfile"]),
         "osmosisShare": overrides.get("osmosisShare", template["osmosisShare"]),
         "startDate": overrides.get("startDate") or template.get("startDate"),
+        "cultivarInfo": overrides.get("cultivarInfo", template.get("cultivarInfo", "")),
+        "substrateInfo": overrides.get("substrateInfo", template.get("substrateInfo", "")),
         "observationAdjustments": deepcopy(
             overrides.get("observationAdjustments") or template.get("observationAdjustments") or DEFAULT_OBSERVATION_ADJUSTMENTS
         ),
@@ -241,9 +248,21 @@ def _create_cultivar_plan(overrides: Optional[Dict[SubstrateLiteral, Dict[str, A
 
 DEFAULT_PLAN: Dict[CultivarLiteral, Dict[SubstrateLiteral, Dict[str, Any]]] = {
     "wedding_cake": _create_cultivar_plan({
-        "coco": {"description": "PhotonFlux baseline schedule for Wedding Cake on coco."},
-        "soil": {"description": "PhotonFlux baseline schedule for Wedding Cake on soil."},
-        "rockwool": {"description": "PhotonFlux baseline schedule for Wedding Cake on rockwool."},
+        "coco": {
+            "description": "PhotonFlux baseline schedule for Wedding Cake on coco.",
+            "cultivarInfo": "Wedding Cake",
+            "substrateInfo": "Coco",
+        },
+        "soil": {
+            "description": "PhotonFlux baseline schedule for Wedding Cake on soil.",
+            "cultivarInfo": "Wedding Cake",
+            "substrateInfo": "Erde",
+        },
+        "rockwool": {
+            "description": "PhotonFlux baseline schedule for Wedding Cake on rockwool.",
+            "cultivarInfo": "Wedding Cake",
+            "substrateInfo": "Steinwolle",
+        },
     }),
     "blue_dream": _create_cultivar_plan({
         "coco": {

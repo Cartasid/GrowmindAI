@@ -92,12 +92,35 @@ class NutrientCalculator:
         substrate: str | None = None,
         plan_entries: Optional[List[Dict[str, Any]]] = None,
         plan_adjustments: Optional[Dict[str, Dict[str, float]]] = None,
+        water_profile: Optional[Dict[str, float]] = None,
+        osmosis_share: Optional[float] = None,
     ) -> None:
         self.substrate = substrate or os.getenv("NUTRIENT_PLAN_SUBSTRATE", "coco")
         self._plan_entries = self._load_plan_entries(self.substrate, plan_entries)
         self._plan_adjustments = plan_adjustments or {}
+        self._water_profile = self._normalize_water_profile(water_profile)
+        self._osmosis_share = self._normalize_osmosis_share(osmosis_share)
         self._inventory_config = self._load_inventory_config()
         self._seed_inventory()
+
+    def _normalize_water_profile(self, profile: Optional[Dict[str, float]]) -> Dict[str, float]:
+        if not isinstance(profile, dict):
+            return {}
+        normalized: Dict[str, float] = {}
+        for key in REQUIRED_NUTRIENT_KEYS:
+            if key in profile and profile[key] is not None:
+                try:
+                    normalized[key] = float(profile[key])
+                except (TypeError, ValueError):
+                    continue
+        return normalized
+
+    def _normalize_osmosis_share(self, value: Optional[float]) -> float:
+        if not isinstance(value, (int, float)):
+            return 0.0
+        if not math.isfinite(float(value)):
+            return 0.0
+        return max(0.0, min(1.0, float(value)))
 
     def _load_plan_entries(self, substrate: str, plan_entries: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Dict[str, Any]]:
         if plan_entries:
@@ -229,6 +252,12 @@ class NutrientCalculator:
             _add_ppm(ppm, PROF_C, float(entry.get("X") or 0.0) * dose_factor)
 
         _add_ppm(ppm, PROF_BURST, float(entry.get("BZ") or 0.0) * dose_factor)
+        if self._water_profile:
+            base_factor = max(0.0, 1.0 - self._osmosis_share)
+            if base_factor > 0:
+                for key in REQUIRED_NUTRIENT_KEYS:
+                    if key in self._water_profile:
+                        ppm[key] = ppm.get(key, 0.0) + self._water_profile[key] * base_factor
         return {k: round(v, 2) for k, v in ppm.items()}
 
     def mix_tank(self, week_key: str, liters: float, observations: Optional[Dict[str, str]] = None) -> Dict[str, Any]:

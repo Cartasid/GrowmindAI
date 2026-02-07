@@ -19,15 +19,29 @@ def _get_engine(
     *,
     plan_entries: Optional[Dict[str, Any]] = None,
     plan_adjustments: Optional[Dict[str, Dict[str, float]]] = None,
+    water_profile: Optional[Dict[str, float]] = None,
+    osmosis_share: Optional[float] = None,
     cache_key: Optional[str] = None,
 ) -> NutrientCalculator:
     cache_key = cache_key or substrate or "__default__"
+    entries = None
+    if plan_entries and isinstance(plan_entries.get("plan"), list):
+        entries = plan_entries.get("plan")
+
+    if entries is not None:
+        engine = NutrientCalculator(
+            substrate=substrate,
+            plan_entries=entries,
+            plan_adjustments=plan_adjustments,
+            water_profile=water_profile,
+            osmosis_share=osmosis_share,
+        )
+        _ENGINE_CACHE[cache_key] = engine
+        return engine
+
     engine = _ENGINE_CACHE.get(cache_key)
     if engine is None:
-        entries = None
-        if plan_entries and isinstance(plan_entries.get("plan"), list):
-            entries = plan_entries.get("plan")
-        engine = NutrientCalculator(substrate=substrate, plan_entries=entries, plan_adjustments=plan_adjustments)
+        engine = NutrientCalculator(substrate=substrate)
         _ENGINE_CACHE[cache_key] = engine
     return engine
 
@@ -71,7 +85,16 @@ def read_plan(
             plan_id = get_active_plan_id_for(cultivar, substrate)
         cache_key = f"{cultivar}:{substrate}:{plan_id or 'default'}"
     plan_adjustments = plan_payload.get("observationAdjustments") if isinstance(plan_payload, dict) else None
-    engine = _get_engine(substrate, plan_entries=plan_payload, plan_adjustments=plan_adjustments, cache_key=cache_key)
+    water_profile = plan_payload.get("waterProfile") if isinstance(plan_payload, dict) else None
+    osmosis_share = plan_payload.get("osmosisShare") if isinstance(plan_payload, dict) else None
+    engine = _get_engine(
+        substrate,
+        plan_entries=plan_payload,
+        plan_adjustments=plan_adjustments,
+        water_profile=water_profile,
+        osmosis_share=osmosis_share,
+        cache_key=cache_key,
+    )
     try:
         result = engine.preview_plan(current_week, reservoir_liters)
         return result
@@ -96,7 +119,16 @@ def preview_plan(payload: MixRequest) -> Dict[str, Any]:
             plan_id = get_active_plan_id_for(payload.cultivar, payload.substrate)
             cache_key = f"{payload.cultivar}:{payload.substrate}:{plan_id}"
     plan_adjustments = plan_payload.get("observationAdjustments") if isinstance(plan_payload, dict) else None
-    engine = _get_engine(payload.substrate, plan_entries=plan_payload, plan_adjustments=plan_adjustments, cache_key=cache_key)
+    water_profile = plan_payload.get("waterProfile") if isinstance(plan_payload, dict) else None
+    osmosis_share = plan_payload.get("osmosisShare") if isinstance(plan_payload, dict) else None
+    engine = _get_engine(
+        payload.substrate,
+        plan_entries=plan_payload,
+        plan_adjustments=plan_adjustments,
+        water_profile=water_profile,
+        osmosis_share=osmosis_share,
+        cache_key=cache_key,
+    )
     try:
         result = engine.preview_plan(payload.week_key, payload.liters, payload.observations)
         return result
@@ -121,7 +153,16 @@ def confirm_mix(payload: MixRequest) -> Dict[str, Any]:
             plan_id = get_active_plan_id_for(payload.cultivar, payload.substrate)
             cache_key = f"{payload.cultivar}:{payload.substrate}:{plan_id}"
     plan_adjustments = plan_payload.get("observationAdjustments") if isinstance(plan_payload, dict) else None
-    engine = _get_engine(payload.substrate, plan_entries=plan_payload, plan_adjustments=plan_adjustments, cache_key=cache_key)
+    water_profile = plan_payload.get("waterProfile") if isinstance(plan_payload, dict) else None
+    osmosis_share = plan_payload.get("osmosisShare") if isinstance(plan_payload, dict) else None
+    engine = _get_engine(
+        payload.substrate,
+        plan_entries=plan_payload,
+        plan_adjustments=plan_adjustments,
+        water_profile=water_profile,
+        osmosis_share=osmosis_share,
+        cache_key=cache_key,
+    )
     try:
         result = engine.mix_tank(payload.week_key, payload.liters, payload.observations)
         return result

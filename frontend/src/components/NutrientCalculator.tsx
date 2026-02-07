@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
-import type { Cultivar, ManagedPlan, ObservationAdjustments, PlanEntry, Substrate } from "../types";
+import type { Cultivar, ManagedPlan, NutrientProfile, ObservationAdjustments, PlanEntry, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
@@ -12,7 +12,7 @@ import {
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
-import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan, updatePlan } from "../services/planService";
+import { createPlan, deletePlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan, updatePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
 
 const DEFAULT_CULTIVAR: Cultivar = "wedding_cake";
@@ -77,6 +77,18 @@ const MIX_DESCRIPTIONS: Record<string, string> = {
   quench: "Quench nur in der letzten Bluetewoche (0.3 g/L).",
 };
 
+const WATER_PROFILE_FIELDS: Array<{ key: keyof NutrientProfile; label: string }> = [
+  { key: "N", label: "N" },
+  { key: "Ca", label: "Ca" },
+  { key: "Mg", label: "Mg" },
+  { key: "K", label: "K" },
+  { key: "Na", label: "Na" },
+  { key: "S", label: "S" },
+  { key: "Cl", label: "Cl" },
+  { key: "Fe", label: "Fe" },
+  { key: "Mn", label: "Mn" },
+];
+
 const DEFAULT_OBSERVATION_ADJUSTMENTS: ObservationAdjustments = {
   ecTrend: { low: 3, high: 0 },
   phDrift: { up: 0, down: 5 },
@@ -115,6 +127,28 @@ const OBSERVATION_EDIT_FIELDS = [
 
 const formatDate = (value: Date) =>
   value.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+
+const phaseTone = (phase: string) => {
+  const lower = phase.toLowerCase();
+  if (phase === "Ernte") return "from-grow-lime/20 via-transparent to-grow-lime/10";
+  if (lower.includes("veg")) return "from-emerald-400/20 via-transparent to-emerald-400/10";
+  if (lower.startsWith("w")) return "from-brand-cyan/20 via-transparent to-brand-cyan/10";
+  if (lower.includes("transition") || lower.includes("flower") || lower.includes("p")) {
+    return "from-violet-400/20 via-transparent to-violet-400/10";
+  }
+  return "from-white/10 via-transparent to-white/5";
+};
+
+const phaseBadge = (phase: string) => {
+  const lower = phase.toLowerCase();
+  if (phase === "Ernte") return "border-grow-lime/40 bg-grow-lime/10 text-grow-lime";
+  if (lower.includes("veg")) return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
+  if (lower.startsWith("w")) return "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan";
+  if (lower.includes("transition") || lower.includes("flower") || lower.includes("p")) {
+    return "border-violet-400/40 bg-violet-400/10 text-violet-200";
+  }
+  return "border-white/20 bg-white/5 text-white/60";
+};
 
 const ppmKeys = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
 
@@ -236,6 +270,9 @@ export function NutrientCalculator() {
     return plans.find((plan: ManagedPlan) => plan.id === selectedPlanId) ?? plans[0];
   }, [plans, selectedPlanId]);
 
+  const selectedWaterProfile = selectedPlan?.waterProfile ?? {};
+  const osmosisPercent = Math.round((selectedPlan?.osmosisShare ?? 0) * 100);
+
   useEffect(() => {
     setStartDateDraft(selectedPlan?.startDate ?? "");
   }, [selectedPlan]);
@@ -310,6 +347,8 @@ export function NutrientCalculator() {
     id: undefined,
     name: plan.name,
     description: plan.description ?? "",
+    cultivarInfo: plan.cultivarInfo ?? "",
+    substrateInfo: plan.substrateInfo ?? "",
     plan: cloneEntries(plan.plan),
     waterProfile: { ...plan.waterProfile },
     osmosisShare: plan.osmosisShare,
@@ -486,6 +525,27 @@ export function NutrientCalculator() {
     }
   };
 
+  const handlePlanDelete = async () => {
+    if (!selectedPlan) return;
+    if (selectedPlan.id === "default") return;
+    const confirmed = window.confirm(`Plan "${selectedPlan.name}" wirklich loeschen?`);
+    if (!confirmed) return;
+    setPlanSaving(true);
+    try {
+      await deletePlan(cultivar, substrate, selectedPlan.id);
+      const available = await fetchAvailablePlans(cultivar, substrate);
+      setPlans(available);
+      const nextId = available.find((plan) => plan.id === activePlanId)?.id || available[0]?.id || "default";
+      setSelectedPlanId(nextId);
+      addToast({ title: "Plan geloescht", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Plan loeschen fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
   const handleStartDateSave = async () => {
     if (!selectedPlan) return;
     setStartDateSaving(true);
@@ -594,6 +654,15 @@ export function NutrientCalculator() {
 
   const updateDraftField = <K extends keyof EditablePlan>(key: K, value: EditablePlan[K]) => {
     setEditorPlan((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updateWaterProfileField = (key: keyof NutrientProfile, value: number) => {
+    setEditorPlan((prev) => {
+      if (!prev) return prev;
+      const current = { ...(prev.waterProfile ?? {}) } as NutrientProfile;
+      current[key] = value;
+      return { ...prev, waterProfile: current };
+    });
   };
 
   const updateEntryField = <K extends keyof PlanEntry>(index: number, key: K, value: PlanEntry[K]) => {
@@ -711,7 +780,18 @@ export function NutrientCalculator() {
                 <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/40">Plan-Info</p>
                   <p className="mt-2 text-white/80">{selectedPlan.description || "Kein Plan-Text hinterlegt."}</p>
-                  <p className="mt-2 text-xs text-white/50">Cultivar: Wedding Cake · Substrat: Coco</p>
+                  <p className="mt-2 text-xs text-white/50">
+                    Cultivar: {selectedPlan.cultivarInfo || "Wedding Cake"} · Substrat: {selectedPlan.substrateInfo || "Coco"}
+                  </p>
+                  <p className="mt-2 text-xs text-white/60">Osmoseanteil: {osmosisPercent}%</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/60 sm:grid-cols-4">
+                    {WATER_PROFILE_FIELDS.map((field) => (
+                      <div key={field.key} className="rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-center">
+                        <p className="text-white/70">{field.label}</p>
+                        <p className="text-white">{(selectedWaterProfile[field.key] ?? 0).toFixed(2)}</p>
+                      </div>
+                    ))}
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white disabled:opacity-60"
@@ -719,6 +799,13 @@ export function NutrientCalculator() {
                       disabled={startDateSaving || !selectedPlan}
                     >
                       {startDateSaving ? "Speichert..." : "Startdatum speichern"}
+                    </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-red/50 hover:text-white disabled:opacity-60"
+                      onClick={handlePlanDelete}
+                      disabled={planSaving || selectedPlan.id === "default"}
+                    >
+                      Plan loeschen
                     </button>
                     <button
                       className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
@@ -945,27 +1032,36 @@ export function NutrientCalculator() {
               </button>
             </div>
             {schedule.length ? (
-              <div className="mt-4 grid gap-2">
-                {schedule.map((item) => (
-                  <div
-                    key={item.phase}
-                    className={`flex items-center justify-between rounded-2xl border px-3 py-2 text-xs ${
-                      currentPhase === item.phase
-                        ? "border-brand-cyan/40 bg-brand-cyan/10 text-white"
-                        : "border-white/10 bg-black/30 text-white/70"
-                    }`}
-                  >
-                    <span>{item.phase}</span>
-                    <div className="flex items-center gap-2">
-                      <span>{item.label}</span>
-                      {currentPhase === item.phase && (
-                        <span className="rounded-full border border-grow-lime/40 bg-grow-lime/10 px-2 py-0.5 text-[10px] text-grow-lime">
-                          Aktuell
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {schedule.map((item) => {
+                  const isCurrent = currentPhase === item.phase;
+                  return (
+                    <div
+                      key={item.phase}
+                      className={`relative overflow-hidden rounded-2xl border px-3 py-3 text-xs ${
+                        isCurrent
+                          ? "border-brand-cyan/50 bg-brand-cyan/10 text-white"
+                          : "border-white/10 bg-black/30 text-white/70"
+                      }`}
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${phaseTone(item.phase)} opacity-70`} />
+                      <div className="relative z-10 flex items-start justify-between gap-2">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${phaseBadge(item.phase)}`}>
+                          {item.phase}
                         </span>
-                      )}
+                        {isCurrent && (
+                          <span className="rounded-full border border-grow-lime/40 bg-grow-lime/10 px-2 py-0.5 text-[10px] text-grow-lime">
+                            Aktuell
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative z-10 mt-3">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-white/50">Zeitraum</p>
+                        <p className="mt-1 text-sm text-white">{item.label}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="mt-4 text-xs text-white/50">Startdatum im Plan setzen, um den Wochenplan zu sehen.</p>
@@ -1177,6 +1273,14 @@ export function NutrientCalculator() {
                 />
               </label>
               <label className="text-sm text-white/70">
+                Cultivar (Info)
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  value={editorPlan.cultivarInfo || ""}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => updateDraftField("cultivarInfo", event.target.value)}
+                />
+              </label>
+              <label className="text-sm text-white/70">
                 Startdatum
                 <input
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
@@ -1186,16 +1290,24 @@ export function NutrientCalculator() {
                 />
               </label>
               <label className="text-sm text-white/70">
-                Osmose-Anteil (0-1)
+                Substrat (Info)
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
+                  value={editorPlan.substrateInfo || ""}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => updateDraftField("substrateInfo", event.target.value)}
+                />
+              </label>
+              <label className="text-sm text-white/70">
+                Osmose-Anteil (%)
                 <input
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none"
                   type="number"
                   min={0}
-                  max={1}
-                  step={0.01}
-                  value={editorPlan.osmosisShare}
+                  max={100}
+                  step={1}
+                  value={Math.round((editorPlan.osmosisShare ?? 0) * 100)}
                   onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    updateDraftField("osmosisShare", Number(event.target.value) || 0)
+                    updateDraftField("osmosisShare", (Number(event.target.value) || 0) / 100)
                   }
                 />
               </label>
@@ -1242,6 +1354,27 @@ export function NutrientCalculator() {
                       ))}
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/50">Wasserprofil (ppm)</p>
+              <p className="mt-2 text-xs text-white/60">Die Werte werden mit (1 - Osmoseanteil) skaliert.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {WATER_PROFILE_FIELDS.map((field) => (
+                  <label key={field.key} className="text-[11px] text-white/60">
+                    {field.label}
+                    <input
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs text-white"
+                      type="number"
+                      step={0.01}
+                      value={(editorPlan.waterProfile?.[field.key] ?? 0) as number}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        updateWaterProfileField(field.key, Number(event.target.value) || 0)
+                      }
+                    />
+                  </label>
                 ))}
               </div>
             </div>
