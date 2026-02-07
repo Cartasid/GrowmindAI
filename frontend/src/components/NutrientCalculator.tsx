@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import type { Cultivar, ManagedPlan, ObservationAdjustments, PlanEntry, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
@@ -15,17 +15,8 @@ import {
 import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan, updatePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
 
-const CULTIVARS: { value: Cultivar; label: string }[] = [
-  { value: "wedding_cake", label: "Wedding Cake" },
-  { value: "blue_dream", label: "Blue Dream" },
-  { value: "amnesia_haze", label: "Amnesia Haze" },
-];
-
-const SUBSTRATES: { value: Substrate; label: string }[] = [
-  { value: "coco", label: "Coco" },
-  { value: "soil", label: "Erde" },
-  { value: "rockwool", label: "Steinwolle" },
-];
+const DEFAULT_CULTIVAR: Cultivar = "wedding_cake";
+const DEFAULT_SUBSTRATE: Substrate = "coco";
 
 type PlanInputs = {
   phase: string;
@@ -139,9 +130,11 @@ const buildNpkRatio = (ppm: Record<string, number> | undefined) => {
   return `${(n / divisor).toFixed(1)}:${(p / divisor).toFixed(1)}:${(k / divisor).toFixed(1)}`;
 };
 
+const AUTO_PHASE_STORAGE_KEY = "growmind_nutrient_auto_phase";
+
 export function NutrientCalculator() {
-  const [cultivar, setCultivar] = useState<Cultivar>("wedding_cake");
-  const [substrate, setSubstrate] = useState<Substrate>("coco");
+  const cultivar = DEFAULT_CULTIVAR;
+  const substrate = DEFAULT_SUBSTRATE;
   const [inputs, setInputs] = useState<PlanInputs>({ ...DEFAULT_INPUTS });
   const [plans, setPlans] = useState<ManagedPlan[]>([]);
   const [activePlanId, setActivePlanId] = useState<string>("");
@@ -158,10 +151,17 @@ export function NutrientCalculator() {
   const [startDateDraft, setStartDateDraft] = useState("");
   const [startDateSaving, setStartDateSaving] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
-  const [autoPhase, setAutoPhase] = useState(true);
+  const [autoPhase, setAutoPhase] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(AUTO_PHASE_STORAGE_KEY);
+    if (stored === null) return true;
+    return stored === "true";
+  });
   const [observations, setObservations] = useState({ ...DEFAULT_OBSERVATIONS });
   const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
   const [inventorySetInput, setInventorySetInput] = useState<Record<string, string>>({});
+  const [importingPlans, setImportingPlans] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -239,6 +239,11 @@ export function NutrientCalculator() {
   useEffect(() => {
     setStartDateDraft(selectedPlan?.startDate ?? "");
   }, [selectedPlan]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(AUTO_PHASE_STORAGE_KEY, String(autoPhase));
+  }, [autoPhase]);
 
   const observationAdjustments = useMemo(
     () => selectedPlan?.observationAdjustments ?? DEFAULT_OBSERVATION_ADJUSTMENTS,
@@ -485,18 +490,105 @@ export function NutrientCalculator() {
     if (!selectedPlan) return;
     setStartDateSaving(true);
     try {
-      const saved = await updatePlan(cultivar, substrate, {
-        ...selectedPlan,
-        startDate: startDateDraft || undefined,
-      });
-      setPlans((prev) => prev.map((plan) => (plan.id === saved.id ? saved : plan)));
-      setSelectedPlanId(saved.id);
-      addToast({ title: "Startdatum gespeichert", variant: "success" });
+      const nextStartDate = startDateDraft || undefined;
+      if (selectedPlan.id === "default") {
+        const draft = buildDraftFromPlan(selectedPlan, {
+          name: `${selectedPlan.name} (Copy)`,
+          startDate: nextStartDate || "",
+        });
+        const saved = await createPlan(cultivar, substrate, draft);
+        const available = await fetchAvailablePlans(cultivar, substrate);
+        setPlans(available);
+        setSelectedPlanId(saved.id);
+        const activeId = await setActivePlan(cultivar, substrate, saved.id);
+        setActivePlanId(activeId);
+        addToast({ title: "Plan kopiert & Startdatum gespeichert", variant: "success" });
+      } else {
+        const saved = await updatePlan(cultivar, substrate, {
+          ...selectedPlan,
+          startDate: nextStartDate,
+        });
+        setPlans((prev) => prev.map((plan) => (plan.id === saved.id ? saved : plan)));
+        setSelectedPlanId(saved.id);
+        addToast({ title: "Startdatum gespeichert", variant: "success" });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ title: "Startdatum speichern fehlgeschlagen", description: message, variant: "error" });
     } finally {
       setStartDateSaving(false);
+    }
+  };
+
+  const handleExportPlans = (onlySelected: boolean) => {
+    const exportPlans = onlySelected && selectedPlan ? [selectedPlan] : plans;
+    if (!exportPlans.length) {
+      addToast({ title: "Kein Plan zum Export", variant: "error" });
+      return;
+    }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      cultivar,
+      substrate,
+      plans: exportPlans,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const suffix = onlySelected ? "plan" : "plaene";
+    link.href = url;
+    link.download = `growmind-${suffix}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportPlans = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportingPlans(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const rawPlans = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.plans)
+          ? parsed.plans
+          : parsed?.plan
+            ? [parsed.plan]
+            : parsed?.id && parsed?.plan
+              ? [parsed]
+              : [];
+
+      if (!rawPlans.length) {
+        addToast({ title: "Import fehlgeschlagen", description: "Keine Plaene im JSON gefunden.", variant: "error" });
+        return;
+      }
+
+      const created: ManagedPlan[] = [];
+      for (const plan of rawPlans) {
+        if (!plan || !plan.plan) continue;
+        const draft = {
+          ...plan,
+          id: undefined,
+          isDefault: false,
+          name: plan.id === "default" ? `${plan.name} (Import)` : plan.name,
+        } as EditablePlan;
+        const saved = await createPlan(cultivar, substrate, draft);
+        created.push(saved);
+      }
+
+      const available = await fetchAvailablePlans(cultivar, substrate);
+      setPlans(available);
+      if (created.length) {
+        setSelectedPlanId(created[created.length - 1].id);
+      }
+      addToast({ title: "Plaene importiert", description: `${created.length} Plaene hinzugefuegt.`, variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Import fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setImportingPlans(false);
+      if (importInputRef.current) importInputRef.current.value = "";
     }
   };
 
@@ -581,34 +673,10 @@ export function NutrientCalculator() {
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">Setup</p>
             <div className="grid gap-4">
-              <label className="text-sm text-white/70">
-                Cultivar
-                <select
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
-                  value={cultivar}
-                  onChange={(event: ValueEvent) => setCultivar(event.target.value as Cultivar)}
-                >
-                  {CULTIVARS.map((option) => (
-                    <option key={option.value} value={option.value} className="bg-[#070a16]">
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-sm text-white/70">
-                Substrat
-                <select
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
-                  value={substrate}
-                  onChange={(event: ValueEvent) => setSubstrate(event.target.value as Substrate)}
-                >
-                  {SUBSTRATES.map((option) => (
-                    <option key={option.value} value={option.value} className="bg-[#070a16]">
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
+                <p className="text-xs uppercase tracking-[0.3em] text-white/40">Standard Setup</p>
+                <p className="mt-2 text-white/80">Wedding Cake · Coco</p>
+              </div>
               <label className="text-sm text-white/70">
                 Plan
                 <select
@@ -643,6 +711,7 @@ export function NutrientCalculator() {
                 <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/40">Plan-Info</p>
                   <p className="mt-2 text-white/80">{selectedPlan.description || "Kein Plan-Text hinterlegt."}</p>
+                  <p className="mt-2 text-xs text-white/50">Cultivar: Wedding Cake · Substrat: Coco</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white disabled:opacity-60"
@@ -651,6 +720,34 @@ export function NutrientCalculator() {
                     >
                       {startDateSaving ? "Speichert..." : "Startdatum speichern"}
                     </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={() => handleExportPlans(true)}
+                      disabled={!selectedPlan}
+                    >
+                      Plan exportieren
+                    </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={() => handleExportPlans(false)}
+                      disabled={!plans.length}
+                    >
+                      Alle Plaene exportieren
+                    </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white disabled:opacity-60"
+                      onClick={() => importInputRef.current?.click()}
+                      disabled={importingPlans}
+                    >
+                      {importingPlans ? "Importiert..." : "Plaene importieren"}
+                    </button>
+                    <input
+                      ref={importInputRef}
+                      className="hidden"
+                      type="file"
+                      accept="application/json"
+                      onChange={handleImportPlans}
+                    />
                   </div>
                   {selectedPlanId !== activePlanId && (
                     <button
