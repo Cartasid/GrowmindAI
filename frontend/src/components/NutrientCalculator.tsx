@@ -151,6 +151,17 @@ const phaseBadge = (phase: string) => {
   return "border-white/20 bg-white/5 text-white/60";
 };
 
+const phaseGlow = (phase: string) => {
+  const lower = phase.toLowerCase();
+  if (phase === "Ernte") return "shadow-[0_0_22px_rgba(72,255,138,0.22)]";
+  if (lower.includes("veg")) return "shadow-[0_0_22px_rgba(52,211,153,0.22)]";
+  if (lower.startsWith("w")) return "shadow-[0_0_22px_rgba(47,230,255,0.22)]";
+  if (lower.includes("transition") || lower.includes("flower") || lower.includes("p")) {
+    return "shadow-[0_0_22px_rgba(108,91,255,0.22)]";
+  }
+  return "shadow-[0_0_18px_rgba(255,255,255,0.08)]";
+};
+
 const phaseIcon = (phase: string) => {
   const lower = phase.toLowerCase();
   if (phase === "Ernte") return Sparkles;
