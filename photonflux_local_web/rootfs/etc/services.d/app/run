@@ -1,7 +1,0 @@
-#!/usr/bin/with-contenv bashio
-set -euo pipefail
-export GEMINI_API_KEY="$(bashio::config 'gemini_api_key')"
-export GEMINI_MODEL="$(bashio::config 'gemini_model')"
-if [ -z "${GEMINI_API_KEY:-}" ]; then bashio::log.warning "GEMINI_API_KEY fehlt. UI ok, /api/* liefert 503."; fi
-cd /app
-exec /opt/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8099
