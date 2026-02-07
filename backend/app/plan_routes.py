@@ -49,7 +49,7 @@ PLANS_COLLECTION = "plans"
 CUSTOM_PLANS_KEY = "customPlans"
 ACTIVE_PLAN_KEY = "activePlanIds"
 DEFAULT_OVERRIDE_KEY = "defaultPlanOverrides"
-EDITABLE_DEFAULT_CULTIVARS: set[str] = {"blue_dream", "amnesia_haze"}
+EDITABLE_DEFAULT_CULTIVARS: set[str] = {"wedding_cake", "blue_dream", "amnesia_haze"}
 
 
 class PlanEntryPayload(BaseModel):

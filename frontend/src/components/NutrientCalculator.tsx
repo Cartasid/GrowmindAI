@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { CalendarDays, Flame, Flower2, Leaf, Sparkles, Sprout, SunMedium } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import type { Cultivar, ManagedPlan, NutrientProfile, ObservationAdjustments, PlanEntry, Substrate } from "../types";
@@ -148,6 +149,24 @@ const phaseBadge = (phase: string) => {
     return "border-violet-400/40 bg-violet-400/10 text-violet-200";
   }
   return "border-white/20 bg-white/5 text-white/60";
+};
+
+const phaseIcon = (phase: string) => {
+  const lower = phase.toLowerCase();
+  if (phase === "Ernte") return Sparkles;
+  if (lower.includes("early")) return Sprout;
+  if (lower.includes("mid")) return Leaf;
+  if (lower.includes("late")) return SunMedium;
+  if (lower.startsWith("w")) {
+    const week = Number.parseInt(lower.replace("w", ""), 10);
+    if (Number.isFinite(week)) {
+      if (week <= 4) return Flower2;
+      if (week <= 8) return Flame;
+      return Sparkles;
+    }
+  }
+  if (lower.includes("transition") || lower.includes("flower") || lower.includes("p")) return Flower2;
+  return CalendarDays;
 };
 
 const ppmKeys = ["N", "P", "K", "Ca", "Mg", "S", "Na", "Fe", "B", "Mo", "Mn", "Zn", "Cu", "Cl"] as const;
@@ -358,6 +377,20 @@ export function NutrientCalculator() {
     ...overrides,
   });
 
+  const buildEditableFromPlan = (plan: ManagedPlan): EditablePlan => ({
+    id: plan.id,
+    name: plan.name,
+    description: plan.description ?? "",
+    cultivarInfo: plan.cultivarInfo ?? "",
+    substrateInfo: plan.substrateInfo ?? "",
+    plan: cloneEntries(plan.plan),
+    waterProfile: { ...plan.waterProfile },
+    osmosisShare: plan.osmosisShare,
+    startDate: plan.startDate ?? "",
+    observationAdjustments: normalizeAdjustments(plan),
+    isDefault: Boolean(plan.isDefault),
+  });
+
   const phaseOptions = useMemo(() => {
     if (!selectedPlan?.plan) return [DEFAULT_INPUTS.phase];
     const phases = selectedPlan.plan
@@ -481,6 +514,12 @@ export function NutrientCalculator() {
     setShowEditor(true);
   };
 
+  const handleEditPlan = () => {
+    if (!selectedPlan) return;
+    setEditorPlan(buildEditableFromPlan(selectedPlan));
+    setShowEditor(true);
+  };
+
   const handleInventoryConsume = async (key: string) => {
     const raw = inventoryInput[key] ?? "";
     const value = Number(raw.replace(",", "."));
@@ -507,16 +546,23 @@ export function NutrientCalculator() {
     }
     setPlanSaving(true);
     try {
-      const saved = await createPlan(cultivar, substrate, editorPlan);
+      const isEditing = Boolean(editorPlan.id);
+      const wasActive = editorPlan.id === activePlanId;
+      const saved = isEditing
+        ? await updatePlan(cultivar, substrate, editorPlan as ManagedPlan)
+        : await createPlan(cultivar, substrate, editorPlan);
       const available = await fetchAvailablePlans(cultivar, substrate);
       setPlans(available);
       setSelectedPlanId(saved.id);
-      if (activateAfterSave) {
+      if (wasActive) {
+        const activeId = await setActivePlan(cultivar, substrate, saved.id);
+        setActivePlanId(activeId);
+      } else if (activateAfterSave) {
         const activeId = await setActivePlan(cultivar, substrate, saved.id);
         setActivePlanId(activeId);
       }
       setShowEditor(false);
-      addToast({ title: "Plan gespeichert", variant: "success" });
+      addToast({ title: isEditing ? "Plan aktualisiert" : "Plan gespeichert", variant: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ title: "Plan speichern fehlgeschlagen", description: message, variant: "error" });
@@ -551,27 +597,13 @@ export function NutrientCalculator() {
     setStartDateSaving(true);
     try {
       const nextStartDate = startDateDraft || undefined;
-      if (selectedPlan.id === "default") {
-        const draft = buildDraftFromPlan(selectedPlan, {
-          name: `${selectedPlan.name} (Copy)`,
-          startDate: nextStartDate || "",
-        });
-        const saved = await createPlan(cultivar, substrate, draft);
-        const available = await fetchAvailablePlans(cultivar, substrate);
-        setPlans(available);
-        setSelectedPlanId(saved.id);
-        const activeId = await setActivePlan(cultivar, substrate, saved.id);
-        setActivePlanId(activeId);
-        addToast({ title: "Plan kopiert & Startdatum gespeichert", variant: "success" });
-      } else {
-        const saved = await updatePlan(cultivar, substrate, {
-          ...selectedPlan,
-          startDate: nextStartDate,
-        });
-        setPlans((prev) => prev.map((plan) => (plan.id === saved.id ? saved : plan)));
-        setSelectedPlanId(saved.id);
-        addToast({ title: "Startdatum gespeichert", variant: "success" });
-      }
+      const saved = await updatePlan(cultivar, substrate, {
+        ...selectedPlan,
+        startDate: nextStartDate,
+      });
+      setPlans((prev) => prev.map((plan) => (plan.id === saved.id ? saved : plan)));
+      setSelectedPlanId(saved.id);
+      addToast({ title: "Startdatum gespeichert", variant: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ title: "Startdatum speichern fehlgeschlagen", description: message, variant: "error" });
@@ -857,6 +889,13 @@ export function NutrientCalculator() {
                     >
                       Neuen Plan anlegen
                     </button>
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
+                      onClick={handleEditPlan}
+                      disabled={!selectedPlan}
+                    >
+                      Plan bearbeiten
+                    </button>
                   </div>
                 </div>
               )}
@@ -1035,6 +1074,7 @@ export function NutrientCalculator() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {schedule.map((item) => {
                   const isCurrent = currentPhase === item.phase;
+                  const Icon = phaseIcon(item.phase);
                   return (
                     <div
                       key={item.phase}
@@ -1046,18 +1086,25 @@ export function NutrientCalculator() {
                     >
                       <div className={`absolute inset-0 bg-gradient-to-br ${phaseTone(item.phase)} opacity-70`} />
                       <div className="relative z-10 flex items-start justify-between gap-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${phaseBadge(item.phase)}`}>
-                          {item.phase}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-xl border ${phaseBadge(item.phase)}`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${phaseBadge(item.phase)}`}>
+                              {item.phase}
+                            </span>
+                            <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-white/50">Zeitraum</p>
+                          </div>
+                        </div>
                         {isCurrent && (
                           <span className="rounded-full border border-grow-lime/40 bg-grow-lime/10 px-2 py-0.5 text-[10px] text-grow-lime">
                             Aktuell
                           </span>
                         )}
                       </div>
-                      <div className="relative z-10 mt-3">
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-white/50">Zeitraum</p>
-                        <p className="mt-1 text-sm text-white">{item.label}</p>
+                      <div className="relative z-10 mt-2">
+                        <p className="text-sm text-white">{item.label}</p>
                       </div>
                     </div>
                   );
@@ -1251,8 +1298,14 @@ export function NutrientCalculator() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-white/50">Plan Editor</p>
-                <h3 className="mt-2 text-2xl font-light">Plan anlegen</h3>
-                <p className="text-sm text-white/60">Passe Plan-Details an und speichere als neuen Plan.</p>
+                <h3 className="mt-2 text-2xl font-light">
+                  {editorPlan?.id ? "Plan bearbeiten" : "Plan anlegen"}
+                </h3>
+                <p className="text-sm text-white/60">
+                  {editorPlan?.id
+                    ? "Passe Plan-Details an und aktualisiere den Plan."
+                    : "Passe Plan-Details an und speichere als neuen Plan."}
+                </p>
               </div>
               <button
                 className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-white/40"
