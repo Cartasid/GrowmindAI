@@ -62,6 +62,30 @@ const DEFAULT_OBSERVATIONS = {
   claw: "none",
 } as const;
 
+const MIX_META: Record<string, { label: string; unit: string }> = {
+  part_a: { label: "Core (Part A)", unit: "g" },
+  part_b: { label: "Vector (Part B)", unit: "g" },
+  part_c: { label: "Pulse (Part C)", unit: "g" },
+  burst: { label: "Burst (PK)", unit: "g" },
+  kelp: { label: "Coast (Kelp)", unit: "g" },
+  amino: { label: "Vitality (Amino)", unit: "ml" },
+  fulvic: { label: "Humic (Fulvic)", unit: "ml" },
+  shield: { label: "Silicate / Hypo", unit: "g" },
+  quench: { label: "Quench", unit: "g" },
+};
+
+const MIX_DESCRIPTIONS: Record<string, string> = {
+  part_a: "CORE Basis (N+Ca).",
+  part_b: "VECTOR Basis (Veg/early flower).",
+  part_c: "PULSE Basis (Bloom, N-frei).",
+  burst: "BURST PK-Booster (spaete Bluete).",
+  kelp: "Tide/Coast Kelp (Stressschutz).",
+  amino: "Helix/Vitality Aminos (Bio-Booster).",
+  fulvic: "Ligand/Humic Fulvic (Aufnahme).",
+  shield: "Silicate-Topdress (per Pflanze anwenden).",
+  quench: "Quench nur in der letzten Bluetewoche (0.3 g/L).",
+};
+
 const DEFAULT_OBSERVATION_ADJUSTMENTS: ObservationAdjustments = {
   ecTrend: { low: 0, high: 0 },
   phDrift: { up: 0, down: 0 },
@@ -197,11 +221,12 @@ export function NutrientCalculator() {
   }, []);
 
   const mixDescriptions = useMemo(() => {
-    if (!inventory?.inventory) return {} as Record<string, string>;
+    const base = { ...MIX_DESCRIPTIONS };
+    if (!inventory?.inventory) return base;
     return Object.entries(inventory.inventory).reduce((acc, [key, value]) => {
       if (value.description) acc[key] = value.description;
       return acc;
-    }, {} as Record<string, string>);
+    }, base);
   }, [inventory]);
 
   const selectedPlan = useMemo(() => {
@@ -849,9 +874,10 @@ export function NutrientCalculator() {
                     <tbody>
                       {MIX_ORDER.filter((key) => key in result.mix).map((key) => {
                         const item = inventory?.inventory?.[key];
-                        const unit = item?.unit || (key === "amino" || key === "fulvic" ? "ml" : "g");
-                        const label = item?.name || key;
-                        const description = item?.description;
+                        const fallback = MIX_META[key] ?? { label: key, unit: "g" };
+                        const unit = item?.unit || fallback.unit;
+                        const label = item?.name || fallback.label;
+                        const description = item?.description || mixDescriptions[key];
                         return (
                           <tr key={key} className="border-t border-white/5">
                             <td className="px-4 py-2 text-white" title={description}>{label}</td>

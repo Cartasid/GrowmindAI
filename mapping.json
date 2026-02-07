@@ -692,15 +692,6 @@
       }
     },
     "additives": {
-      "shield": {
-        "name": "Silicate / Hypo",
-        "unit": "g",
-        "full_size": 100,
-        "threshold_warn": 10,
-        "threshold_warn_percent": 10,
-        "role": "structure",
-        "description": "Silicate-Topdress (4g/Pflanze). Um die Pflanze verteilen."
-      },
       "quench": {
         "name": "Quench",
         "unit": "g",
@@ -718,24 +709,6 @@
         "threshold_warn_percent": 10,
         "role": "stress",
         "description": "Stress-Schutz (Pulver)."
-      },
-      "amino": {
-        "name": "Vitality (Amino)",
-        "unit": "ml",
-        "full_size": 250,
-        "threshold_warn": 40,
-        "threshold_warn_percent": 10,
-        "role": "vitality",
-        "description": "Bio-Booster (Liquid)."
-      },
-      "fulvic": {
-        "name": "Humic (Fulvic)",
-        "unit": "ml",
-        "full_size": 250,
-        "threshold_warn": 40,
-        "threshold_warn_percent": 10,
-        "role": "uptake",
-        "description": "Aufnahme-Booster (Liquid)."
       }
     }
   },

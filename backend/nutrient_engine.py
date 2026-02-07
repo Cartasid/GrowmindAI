@@ -296,6 +296,8 @@ class NutrientCalculator:
     def consume_mix(self, mix: Dict[str, float]):
         current = db.fetch_inventory()
         for key, used in mix.items():
+            if key not in self._inventory_config:
+                continue
             if key in current:
                 new_level = max(0.0, current[key]["grams"] - used)
                 db.update_inventory(key, new_level)
