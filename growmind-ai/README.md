@@ -9,7 +9,6 @@ GrowMind AI is an intelligent assistant for cannabis cultivation that integrates
 ## Features
 
 - 🌡️ **Real-time Sensor Monitoring** - Climate, lighting, and substrate sensors via Home Assistant
-- 🤖 **AI-Powered Plans** - Gemini generates optimal nutrient schedules based on cultivar and substrate
 - 📊 **Nutrient Calculator** - PhotonFlux-integrated dosing system with PPM profiles
 - 📓 **Growth Journal** - Document every stage with AI analysis, photo uploads, and quality ratings
 - 🎨 **Modern Dashboard** - Real-time data visualization with Framer Motion animations
@@ -54,7 +53,6 @@ GrowMind AI is an intelligent assistant for cannabis cultivation that integrates
 
 Access the GrowMind AI dashboard from your Home Assistant sidebar. The dashboard provides:
 - Real-time climate monitoring
-- AI-powered grow plan suggestions
 - Nutrient schedule tracking
 - Growth journal with photo uploads
 - Performance analytics

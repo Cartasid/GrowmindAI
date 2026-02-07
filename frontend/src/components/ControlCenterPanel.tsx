@@ -15,7 +15,7 @@ const CONTROL_SECTIONS = [
   {
     key: "climate_controls",
     title: "Klima Regler",
-    description: "Setpoints und HVAC-Modi fuer die Growbox.",
+    description: "Setpoints fuer die Growbox.",
   },
   {
     key: "climate_actuators",
@@ -459,10 +459,17 @@ export function ControlCenterPanel() {
 
   const sections = useMemo(
     () =>
-      CONTROL_SECTIONS.map((section) => ({
-        ...section,
-        items: config?.[section.key]?.inputs ?? [],
-      })).filter((section) => section.items.length > 0),
+      CONTROL_SECTIONS.map((section) => {
+        const items = config?.[section.key]?.inputs ?? [];
+        const filtered =
+          section.key === "climate_controls"
+            ? items.filter((item) => item.role !== "hvac_mode")
+            : items;
+        return {
+          ...section,
+          items: filtered,
+        };
+      }).filter((section) => section.items.length > 0),
     [config]
   );
 
