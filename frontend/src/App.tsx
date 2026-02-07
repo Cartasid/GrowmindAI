@@ -33,6 +33,7 @@ import { CropSteeringCopilotPanel } from "./components/CropSteeringCopilotPanel"
 import { PostHarvestPanel } from "./components/PostHarvestPanel";
 import { getActiveGrowId, setActiveGrowId, getGrows } from "./services/growService";
 import { useToast } from "./components/ToastProvider";
+import { fetchTimeSeries, type TimeSeriesPoint } from "./services/timeseriesService";
 import Journal from "./Journal";
 import { useSensorStatus } from "./hooks/useSensorStatus";
 import logo from "./assets/growmind-logo.svg";
@@ -158,6 +159,21 @@ function GradientCard({ metric }: { metric: Metric }) {
   );
 }
 
+const buildSparklinePath = (points: TimeSeriesPoint[], width = 120, height = 36) => {
+  if (!points.length) return "";
+  const values = points.map((point) => point.v);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return points
+    .map((point, index) => {
+      const x = (index / Math.max(points.length - 1, 1)) * width;
+      const y = height - ((point.v - min) / range) * height;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+};
+
 function App() {
   const [activeSection, setActiveSection] = useState<SectionKey>("overview");
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
@@ -247,6 +263,42 @@ function App() {
     warnRatio: 0.1,
     pollSeconds: 5,
   });
+
+  const [climateSeries, setClimateSeries] = useState<Record<string, TimeSeriesPoint[]>>({});
+
+  useEffect(() => {
+    let active = true;
+    const entries = [
+      { key: "vpd", entityId: vpd.entityIds.actual },
+      { key: "temp", entityId: temp.entityIds.actual },
+      { key: "humidity", entityId: humidity.entityIds.actual },
+    ];
+    const load = async () => {
+      const next: Record<string, TimeSeriesPoint[]> = {};
+      await Promise.all(
+        entries.map(async (entry) => {
+          if (!entry.entityId) return;
+          try {
+            const payload = await fetchTimeSeries({
+              entity_ids: [entry.entityId],
+              range_hours: 24,
+              interval_minutes: 15,
+            });
+            next[entry.key] = payload.series?.[entry.entityId] ?? [];
+          } catch {
+            next[entry.key] = [];
+          }
+        })
+      );
+      if (active) {
+        setClimateSeries(next);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [vpd.entityIds.actual, temp.entityIds.actual, humidity.entityIds.actual]);
 
   useEffect(() => {
     let cancelled = false;
@@ -432,7 +484,7 @@ function App() {
                       <div className="flex flex-wrap items-center justify-between gap-4">
                         <div>
                           <h2 className="gradient-text text-xl font-semibold">Klima</h2>
-                          <p className="text-sm text-white/60">Tesla-dark climate loop · optimiert für VPD 1.2</p>
+                          <p className="text-sm text-white/60">Live Klima-Status, Targets und Trends.</p>
                         </div>
                         <button
                           className="rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm text-white/70 transition hover:border-grow-cyan/60 hover:text-grow-cyan"
@@ -464,6 +516,16 @@ function App() {
                               <p className="text-4xl font-light text-white">
                                 {vpd.value != null ? `${vpd.value.toFixed(2)} kPa` : "—"}
                               </p>
+                              {climateSeries.vpd?.length ? (
+                                <svg viewBox="0 0 120 36" className="mt-4 h-9 w-full">
+                                  <path
+                                    d={buildSparklinePath(climateSeries.vpd)}
+                                    fill="none"
+                                    stroke="#2FE6FF"
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              ) : null}
                             </GlassCard>
                           </motion.div>
                           <motion.div variants={fadeUp}>
@@ -487,6 +549,16 @@ function App() {
                               <p className="text-4xl font-light text-white">
                                 {temp.value != null ? `${temp.value.toFixed(1)} °C` : "—"}
                               </p>
+                              {climateSeries.temp?.length ? (
+                                <svg viewBox="0 0 120 36" className="mt-4 h-9 w-full">
+                                  <path
+                                    d={buildSparklinePath(climateSeries.temp)}
+                                    fill="none"
+                                    stroke="#FF8A3D"
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              ) : null}
                             </GlassCard>
                           </motion.div>
                           <motion.div variants={fadeUp}>
@@ -510,6 +582,16 @@ function App() {
                               <p className="text-4xl font-light text-white">
                                 {humidity.value != null ? `${humidity.value.toFixed(0)} %` : "—"}
                               </p>
+                              {climateSeries.humidity?.length ? (
+                                <svg viewBox="0 0 120 36" className="mt-4 h-9 w-full">
+                                  <path
+                                    d={buildSparklinePath(climateSeries.humidity)}
+                                    fill="none"
+                                    stroke="#14F195"
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              ) : null}
                             </GlassCard>
                           </motion.div>
                         </motion.div>

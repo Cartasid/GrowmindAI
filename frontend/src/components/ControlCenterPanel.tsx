@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchConfig, updateConfigValue, type ConfigMap } from "../services/configService";
+import { fetchAutomations, setAutomationEnabled, type AutomationSummary } from "../services/automationService";
 import { useHaEntity } from "../hooks/useHaEntity";
 import { useToast } from "./ToastProvider";
 
@@ -18,7 +19,7 @@ const CONTROL_SECTIONS = [
   {
     key: "irrigation_controls",
     title: "Bewaesserung",
-    description: "Manuelle Pulse, Drain- und Flush-Aktionen.",
+    description: "Manuelle Pulse und Flush-Aktionen fuer die Bewaesserung.",
   },
   {
     key: "co2_controls",
@@ -62,6 +63,11 @@ type ConfigItem = {
 
 type PanelStatus = "idle" | "loading" | "ready" | "error";
 
+type HvacMode = "auto_ai" | "manual" | "app_auto";
+
+const HVAC_MODE_STORAGE_KEY = "growmind.hvac_mode";
+const HVAC_AUTOMATION_STORAGE_KEY = "growmind.hvac_automation";
+
 const parseNumber = (value: string): number | null => {
   const num = Number(String(value).replace(",", "."));
   return Number.isFinite(num) ? num : null;
@@ -82,6 +88,13 @@ const resolveOptions = (type: string | undefined, haEntity: ReturnType<typeof us
     }
   }
   return [] as string[];
+};
+
+const formatStatus = (value: string | null | undefined) => {
+  if (!value) return "unbekannt";
+  if (value === "on") return "an";
+  if (value === "off") return "aus";
+  return value;
 };
 
 function ControlRow({
@@ -111,6 +124,13 @@ function ControlRow({
   const isToggle = TOGGLE_TYPES.has(type);
   const isSelect = SELECT_TYPES.has(type);
   const isNumber = NUMBER_TYPES.has(type);
+  const statusText = formatStatus(haEntity.raw?.state ?? (item.value != null ? String(item.value) : null));
+  const statusClass =
+    statusText === "an"
+      ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+      : statusText === "aus"
+      ? "border-white/10 bg-black/40 text-white/70"
+      : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange";
 
   return (
     <div className="glass-card rounded-2xl px-4 py-3">
@@ -119,6 +139,9 @@ function ControlRow({
           <p className="text-sm text-white">{item.label || item.role || "Unbenannt"}</p>
           <p className="text-xs text-white/50">Role: {item.role || "-"}</p>
         </div>
+        <span className={`rounded-full border px-3 py-1 text-[10px] ${statusClass}`}>
+          Status: {statusText}
+        </span>
         {isAction ? (
           <button
             className="rounded-full border border-brand-orange/40 bg-brand-orange/10 px-4 py-1 text-xs text-brand-orange shadow-brand-glow"
@@ -204,6 +227,17 @@ export function ControlCenterPanel() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [hvacMode, setHvacMode] = useState<HvacMode>(() => {
+    if (typeof window === "undefined") return "auto_ai";
+    const stored = window.localStorage.getItem(HVAC_MODE_STORAGE_KEY) as HvacMode | null;
+    return stored || "auto_ai";
+  });
+  const [hvacAutomationId, setHvacAutomationId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(HVAC_AUTOMATION_STORAGE_KEY) || "";
+  });
+  const [automations, setAutomations] = useState<AutomationSummary[]>([]);
+  const [automationStatus, setAutomationStatus] = useState<PanelStatus>("idle");
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -224,6 +258,36 @@ export function ControlCenterPanel() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setAutomationStatus("loading");
+    fetchAutomations()
+      .then((data) => {
+        if (!active) return;
+        setAutomations(data);
+        setAutomationStatus("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setAutomationStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(HVAC_MODE_STORAGE_KEY, hvacMode);
+  }, [hvacMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hvacAutomationId) {
+      window.localStorage.setItem(HVAC_AUTOMATION_STORAGE_KEY, hvacAutomationId);
+    }
+  }, [hvacAutomationId]);
 
   const keyFor = (category: string, role: string) => `${category}:${role}`;
 
@@ -277,6 +341,38 @@ export function ControlCenterPanel() {
     }
   };
 
+  const applyAppAutoSetpoints = async () => {
+    const climateItems = config?.climate_controls?.inputs ?? [];
+    const tempItem = climateItems.find((item) => item.role === "temp_setpoint");
+    const humidityItem = climateItems.find((item) => item.role === "humidity_setpoint");
+    if (tempItem?.value != null) {
+      await updateConfigValue({ category: "climate_controls", role: "temp_setpoint", value: tempItem.value });
+    }
+    if (humidityItem?.value != null) {
+      await updateConfigValue({ category: "climate_controls", role: "humidity_setpoint", value: humidityItem.value });
+    }
+  };
+
+  const handleHvacModeChange = async (nextMode: HvacMode) => {
+    setHvacMode(nextMode);
+    if (!hvacAutomationId) return;
+    try {
+      if (nextMode === "manual" || nextMode === "app_auto") {
+        await setAutomationEnabled(hvacAutomationId, false);
+      } else {
+        await setAutomationEnabled(hvacAutomationId, true);
+      }
+      if (nextMode === "app_auto") {
+        await applyAppAutoSetpoints();
+      }
+      addToast({ title: "HVAC Mode aktualisiert", description: nextMode, variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      addToast({ title: "HVAC Mode fehlgeschlagen", description: message, variant: "error" });
+    }
+  };
+
   const sections = useMemo(
     () =>
       CONTROL_SECTIONS.map((section) => ({
@@ -306,6 +402,43 @@ export function ControlCenterPanel() {
       )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 lg:col-span-2">
+          <p className="meta-mono text-[11px] text-white/50">HVAC Mode</p>
+          <p className="mt-2 text-xs text-white/50">
+            Auto (AI) nutzt die ausgewaehlte Automation. Manuell deaktiviert sie. App Auto steuert die Setpoints direkt.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-white/60">
+              Modus
+              <select
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                value={hvacMode}
+                onChange={(event) => handleHvacModeChange(event.target.value as HvacMode)}
+              >
+                <option value="auto_ai" className="bg-[#070a16]">Auto (AI)</option>
+                <option value="manual" className="bg-[#070a16]">Manuell</option>
+                <option value="app_auto" className="bg-[#070a16]">App Auto</option>
+              </select>
+            </label>
+            <label className="text-xs text-white/60">
+              Klima-Automation
+              <select
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                value={hvacAutomationId}
+                onChange={(event) => setHvacAutomationId(event.target.value)}
+              >
+                <option value="" className="bg-[#070a16]">
+                  {automationStatus === "loading" ? "Laedt..." : "Bitte auswaehlen"}
+                </option>
+                {automations.map((automation) => (
+                  <option key={automation.entity_id} value={automation.entity_id} className="bg-[#070a16]">
+                    {automation.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
         {sections.map((section) => (
           <div key={section.key} className="rounded-2xl border border-white/10 bg-black/30 p-4">
             <p className="meta-mono text-[11px] text-white/50">{section.title}</p>

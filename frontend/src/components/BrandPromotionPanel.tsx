@@ -3,18 +3,43 @@ import logo from "../assets/growmind-logo.svg";
 const PRODUCTS = [
   {
     name: "Core A",
-    tag: "Veg Base",
-    description: "Stabiler N+Ca Kern fuer aggressive Veg-Phasen.",
+    tag: "Base",
+    description: "Stabiler Basis-Stack fuer Veg und fruehe Entwicklung.",
   },
   {
     name: "Vector X",
-    tag: "Transition",
-    description: "Mehr Spurenelemente und Push fuer Stretch.",
+    tag: "Veg Duenger",
+    description: "Veg-Formel fuer Strukturaufbau und gleichmaessigen Wuchs.",
   },
   {
     name: "Pulse BZ",
-    tag: "Bloom",
-    description: "PK Fokus fuer dichte, harzige Blueten.",
+    tag: "Bluete",
+    description: "Bluete-Formel fuer Schub, Dichte und Aroma.",
+  },
+  {
+    name: "Burst",
+    tag: "PK Booster",
+    description: "PK-Boost fuer Peak-Flowering und Finisher-Phasen.",
+  },
+  {
+    name: "Tide",
+    tag: "Kelp",
+    description: "Kelp-Extrakt fuer Wurzelvitalitaet und Stresspuffer.",
+  },
+  {
+    name: "Helix",
+    tag: "Amino",
+    description: "Amino-Komplex fuer schnelle Regeneration und Wachstum.",
+  },
+  {
+    name: "Ligand",
+    tag: "Fulvic",
+    description: "Fulvic-Boost fuer bessere Aufnahme und Chelatierung.",
+  },
+  {
+    name: "Hypo",
+    tag: "Silicate",
+    description: "Silicate-Support fuer Zellstaerke und Struktur.",
   },
 ];
 

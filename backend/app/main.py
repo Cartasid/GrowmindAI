@@ -114,6 +114,9 @@ _hass_lock = asyncio.Lock()
 _notify_lock = asyncio.Lock()
 _warned_missing_alerts = False
 
+IRRIGATION_PULSE_SECONDS = _env_int("IRRIGATION_PULSE_SECONDS", 20, minimum=1)
+IRRIGATION_FLUSH_SECONDS = _env_int("IRRIGATION_FLUSH_SECONDS", 180, minimum=1)
+
 _telemetry_task: Optional[asyncio.Task[Any]] = None
 _telemetry_stop: Optional[asyncio.Event] = None
 _hass_client: Optional[httpx.AsyncClient] = None
@@ -701,6 +704,15 @@ async def _invoke_service(domain: str, service: str, payload: Dict[str, Any]) ->
         raise HTTPException(status_code=502, detail="Failed to call Home Assistant service.") from exc
 
 
+async def _pulse_entity(entity_id: str, seconds: int) -> None:
+    domain = entity_id.split(".", 1)[0]
+    try:
+        await _invoke_service(domain, "turn_on", {"entity_id": entity_id})
+        await asyncio.sleep(max(1, seconds))
+    finally:
+        await _invoke_service(domain, "turn_off", {"entity_id": entity_id})
+
+
 @app.get("/api/ha/state/{entity_id}")
 async def read_ha_state(entity_id: str, request: Request) -> Response:
     try:
@@ -830,6 +842,34 @@ async def get_dashboard() -> Dict[str, Any]:
 
 @app.post("/api/config/update")
 async def update_configuration(payload: UpdatePayload):
+    if payload.role in {"irrigation_pulse", "flush_run"}:
+        input_meta = _find_input(payload.category, payload.role)
+        if input_meta.get("entity_id"):
+            service_call = _build_service_call(input_meta, payload.value)
+            if not service_call:
+                raise HTTPException(status_code=400, detail=f"Unsupported entity type for role '{payload.role}'")
+            try:
+                await _invoke_service(
+                    domain=service_call["domain"],
+                    service=service_call["service"],
+                    payload=service_call["payload"],
+                )
+                return {"status": "ok"}
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+
+        try:
+            pump_meta = _find_input("irrigation_controls", "irrigation_enable")
+        except HTTPException:
+            pump_meta = {}
+        pump_entity = pump_meta.get("entity_id")
+        if not pump_entity:
+            raise HTTPException(status_code=400, detail="No irrigation pump entity configured for pulse/flush")
+        duration = IRRIGATION_FLUSH_SECONDS if payload.role == "flush_run" else IRRIGATION_PULSE_SECONDS
+        asyncio.create_task(_pulse_entity(pump_entity, duration))
+        return {"status": "ok"}
+
     input_meta = _find_input(payload.category, payload.role)
     service_call = _build_service_call(input_meta, payload.value)
     if not service_call:

@@ -200,12 +200,6 @@
         "label": "Flush Run",
         "entity_id": "script.grow_flush_cycle",
         "type": "script"
-      },
-      {
-        "role": "drain_pump",
-        "label": "Drain Pump",
-        "entity_id": "switch.grow_drain_pump",
-        "type": "switch"
       }
     ]
   },

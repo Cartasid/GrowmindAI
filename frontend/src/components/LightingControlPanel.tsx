@@ -55,6 +55,19 @@ const InputRow = ({ item, category, pendingValue, setPending, onSave, busy }: In
   const haEntity = useHaEntity(entityId || undefined, 8);
 
   const currentValue = pendingValue !== "" ? pendingValue : String(item.value ?? "");
+  const statusText = (() => {
+    const raw = haEntity.raw?.state ?? (item.value != null ? String(item.value) : "");
+    if (!raw) return "unbekannt";
+    if (raw === "on") return "an";
+    if (raw === "off") return "aus";
+    return String(raw);
+  })();
+  const statusClass =
+    statusText === "an"
+      ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+      : statusText === "aus"
+      ? "border-white/10 bg-black/40 text-white/70"
+      : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange";
   const selectOptions = Array.isArray(haEntity.raw?.attributes?.options)
     ? (haEntity.raw?.attributes?.options as string[])
     : [];
@@ -68,6 +81,9 @@ const InputRow = ({ item, category, pendingValue, setPending, onSave, busy }: In
           <p className="text-sm text-white">{item.label || role || "Unbenannt"}</p>
           <p className="text-xs text-white/50">Role: {role || "-"}</p>
         </div>
+        <span className={`rounded-full border px-3 py-1 text-[10px] ${statusClass}`}>
+          Status: {statusText}
+        </span>
         <button
           className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-1 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70"
           onClick={handleSave}
