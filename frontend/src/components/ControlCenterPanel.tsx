@@ -32,11 +32,6 @@ const CONTROL_SECTIONS = [
     title: "CO2 Steuerung",
     description: "CO2 Zielwerte und Aktivierung.",
   },
-  {
-    key: "safety_controls",
-    title: "Safety & Modes",
-    description: "Sicherheitsmodi, Szenen und Alarme.",
-  },
 ];
 
 const ACTION_TYPES = new Set(["button", "script", "scene"]);
@@ -103,7 +98,16 @@ const resolveOptions = (type: string | undefined, haEntity: ReturnType<typeof us
   return [] as string[];
 };
 
-const formatStatus = (value: string | null | undefined) => {
+const formatStatus = (
+  value: string | null | undefined,
+  type: string | undefined,
+  attributes?: Record<string, unknown>
+) => {
+  if (type === "fan_percentage") {
+    const raw = attributes?.percentage;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) return `${Math.round(numeric)}%`;
+  }
   if (!value) return "unbekannt";
   if (value === "on") return "an";
   if (value === "off") return "aus";
@@ -162,7 +166,11 @@ function ControlRow({
   const isToggle = TOGGLE_TYPES.has(type);
   const isSelect = SELECT_TYPES.has(type);
   const isNumber = NUMBER_TYPES.has(type);
-  const statusText = formatStatus(haEntity.raw?.state ?? (item.value != null ? String(item.value) : null));
+  const statusText = formatStatus(
+    haEntity.raw?.state ?? (item.value != null ? String(item.value) : null),
+    type,
+    haEntity.raw?.attributes as Record<string, unknown> | undefined
+  );
   const statusClass =
     statusText === "an"
       ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
@@ -175,7 +183,6 @@ function ControlRow({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-white">{item.label || item.role || "Unbenannt"}</p>
-          <p className="text-xs text-white/50">Role: {item.role || "-"}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-[10px] ${statusClass}`}>
           Status: {statusText}
@@ -478,6 +485,13 @@ export function ControlCenterPanel() {
     [config]
   );
 
+  const substrateEcTarget = useMemo(() => {
+    const items = config?.crop_steering?.inputs ?? [];
+    const ecItem = items.find((item) => item.role === "substrate_ec");
+    const numeric = parseNumber(String(ecItem?.value ?? ""));
+    return numeric != null ? numeric : null;
+  }, [config]);
+
   return (
     <section className="glass-panel tactical-grid relative overflow-hidden rounded-3xl p-5 shadow-neon sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -558,6 +572,11 @@ export function ControlCenterPanel() {
           <div key={section.key} className="rounded-2xl border border-white/10 bg-black/30 p-4">
             <p className="meta-mono text-[11px] text-white/50">{section.title}</p>
             <p className="mt-2 text-xs text-white/50">{section.description}</p>
+            {section.key === "irrigation_controls" && substrateEcTarget != null && (
+              <p className="mt-2 text-xs text-white/60">
+                Substrate EC Ziel: {substrateEcTarget.toFixed(2)} mS/cm
+              </p>
+            )}
             <div className="mt-4 space-y-4">
               {section.items.map((item) => {
                 const key = keyFor(section.key, item.role ?? "");

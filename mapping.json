@@ -192,13 +192,11 @@
       {
         "role": "irrigation_pulse",
         "label": "Irrigation Pulse",
-        "entity_id": "script.grow_irrigation_pulse",
         "type": "script"
       },
       {
         "role": "flush_run",
         "label": "Flush Run",
-        "entity_id": "script.grow_flush_cycle",
         "type": "script"
       }
     ]
@@ -218,29 +216,6 @@
         "entity_id": "number.grow_co2_target",
         "type": "number",
         "unit": "ppm"
-      }
-    ]
-  },
-  "safety_controls": {
-    "label": "Safety & Modes",
-    "inputs": [
-      {
-        "role": "panic_mode",
-        "label": "Panic Mode",
-        "entity_id": "scene.grow_panic",
-        "type": "scene"
-      },
-      {
-        "role": "safe_mode",
-        "label": "Safe Mode",
-        "entity_id": "scene.grow_safe",
-        "type": "scene"
-      },
-      {
-        "role": "alarm_ack",
-        "label": "Acknowledge Alarm",
-        "entity_id": "button.grow_alarm_ack",
-        "type": "button"
       }
     ]
   },

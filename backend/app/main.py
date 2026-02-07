@@ -896,8 +896,10 @@ async def get_configuration(request: Request) -> Response:
 
         for input_meta in definition.get("inputs", []):
             entity_id = input_meta.get("entity_id")
-            if entity_id:
-                state = state_map.get(entity_id, {}).get("state")
+            role = input_meta.get("role")
+            is_virtual_action = category == "irrigation_controls" and role in {"irrigation_pulse", "flush_run"}
+            if entity_id or is_virtual_action:
+                state = state_map.get(entity_id, {}).get("state") if entity_id else None
                 category_payload["inputs"].append({**input_meta, "value": state})
 
         for target_meta in definition.get("targets", []):
