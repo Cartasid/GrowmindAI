@@ -153,23 +153,3 @@ export interface AiAnalysisResponse {
   recommendedActions: string[];
   disclaimer: string;
 }
-
-export interface PlanOptimizationSuggestion {
-  phase: string;
-  stage: string;
-  A: number;
-  X: number;
-  BZ: number;
-  pH: string;
-  EC: string;
-  achieved?: Record<string, number>;
-  diff?: Record<string, number>;
-  notes?: string;
-  reasoning?: string;
-  risks?: string[];
-}
-
-export interface PlanOptimizationResponse {
-  plan: PlanOptimizationSuggestion[];
-  summary?: string;
-}

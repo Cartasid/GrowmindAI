@@ -92,21 +92,6 @@ class StagePayload(BaseModel):
     lang: Optional[str] = "en"
 
 
-class PlanWeekTarget(BaseModel):
-    phase: str
-    stage: Optional[str] = None
-    targets: Dict[str, float]
-
-
-class PlanOptimizationPayload(BaseModel):
-    lang: Optional[str] = "en"
-    cultivar: Optional[str] = None
-    substrate: Optional[str] = None
-    waterProfile: Optional[Dict[str, float]] = None
-    osmosisShare: Optional[float] = None
-    weeks: List[PlanWeekTarget]
-
-
 class SteeringCopilotPayload(BaseModel):
     lang: Optional[str] = "en"
     phase: Optional[str] = None
@@ -500,35 +485,6 @@ def _build_stage_prompt(payload: StagePayload) -> Tuple[List[types.Part], str]:
     return [types.Part.from_text(text=prompt)], extra
 
 
-def _build_optimize_prompt(payload: PlanOptimizationPayload) -> Tuple[List[types.Part], str]:
-    lang = (payload.lang or "en").lower()
-    is_german = lang.startswith("de")
-    intro = (
-        "Du bist ein Master-Grower und optimierst ein Nährstoffschema für Cannabis."
-        if is_german
-        else "You are a master grower optimizing a cannabis nutrient schedule."
-    )
-    meta = {
-        "cultivar": payload.cultivar,
-        "substrate": payload.substrate,
-        "waterProfile": payload.waterProfile,
-        "osmosisShare": payload.osmosisShare,
-        "weeks": [week.model_dump() for week in payload.weeks],
-    }
-    prompt = (
-        f"{intro}\n"
-        "Given weekly target elemental PPMs, propose a weekly dosing plan for base nutrients A, X, BZ plus target pH/EC.\n"
-        "Return JSON with keys: plan(array[ {phase,stage,A,X,BZ,pH,EC,achieved?,diff?,notes?,reasoning?,risks?} ]), summary(string optional).\n"
-        "reasoning should be a concise explanation per phase. risks should be array of short cautions.\n"
-        "Return JSON only.\n"
-        f"INPUT:{json.dumps(meta, ensure_ascii=False)}"
-    )
-    language_label = "German" if is_german else "English"
-    example = '{"plan":[{"phase":"VEG","stage":"Vegetative","A":2.0,"X":1.0,"BZ":0.5,"pH":"5.8","EC":"1.6","reasoning":"...","risks":["..."]}],"summary":"..."}'
-    extra = _strict_json_instruction(example, language_label)
-    return [types.Part.from_text(text=prompt)], extra
-
-
 async def _generate_text_with_retry(
     prompt: str,
     max_tokens: int,
@@ -673,30 +629,6 @@ async def analyze_stage(payload: StagePayload):
     except Exception as exc:
         logger.exception("Gemini analyze-stage failed")
         return JSONResponse({"error": "Failed to analyze stage."}, status_code=500)
-
-
-@router.post("/optimize-plan")
-async def optimize_plan(payload: PlanOptimizationPayload):
-    _ = _api_key()
-    if not payload.weeks:
-        return JSONResponse({"error": "No week targets provided."}, status_code=400)
-    user_parts, extra = _build_optimize_prompt(payload)
-    try:
-        parsed, raw = await _generate_json_with_retry(user_parts, extra_instruction=extra, max_tokens=2048, temperature=0.3)
-        if isinstance(parsed, dict) and isinstance(parsed.get("plan"), list):
-            return parsed
-        fallback = _strip_code_fences(raw)
-        if not fallback:
-            return JSONResponse({"error": "No model output."}, status_code=502)
-        return {"plan": [], "summary": fallback}
-    except errors.APIError as exc:
-        logger.warning("Gemini optimize-plan failed (%s)", exc.code)
-        return JSONResponse({"error": "Gemini API error."}, status_code=502)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Gemini optimize-plan failed")
-        return JSONResponse({"error": "Failed to optimize plan."}, status_code=500)
 
 
 @router.post("/steering-copilot")
