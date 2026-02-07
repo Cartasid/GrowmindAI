@@ -87,12 +87,12 @@ const MIX_DESCRIPTIONS: Record<string, string> = {
 };
 
 const DEFAULT_OBSERVATION_ADJUSTMENTS: ObservationAdjustments = {
-  ecTrend: { low: 0, high: 0 },
-  phDrift: { up: 0, down: 0 },
-  tipburn: { mild: 0, strong: 0 },
-  pale: { mild: 0, strong: 0 },
-  caMgDeficiency: { mild: 0, strong: 0 },
-  claw: { mild: 0, strong: 0 },
+  ecTrend: { low: 3, high: 0 },
+  phDrift: { up: 0, down: 5 },
+  tipburn: { mild: -5, strong: -7.5 },
+  pale: { mild: 8, strong: 12 },
+  caMgDeficiency: { mild: 5, strong: 8 },
+  claw: { mild: -6, strong: -8 },
 };
 
 const OBSERVATION_EDIT_FIELDS = [

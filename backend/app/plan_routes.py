@@ -37,12 +37,12 @@ DEFAULT_OSMOSIS_SHARES: Dict[SubstrateLiteral, float] = {
 }
 
 DEFAULT_OBSERVATION_ADJUSTMENTS: Dict[str, Dict[str, float]] = {
-    "ecTrend": {"low": 0.0, "high": 0.0},
-    "phDrift": {"up": 0.0, "down": 0.0},
-    "tipburn": {"mild": 0.0, "strong": 0.0},
-    "pale": {"mild": 0.0, "strong": 0.0},
-    "caMgDeficiency": {"mild": 0.0, "strong": 0.0},
-    "claw": {"mild": 0.0, "strong": 0.0},
+    "ecTrend": {"low": 3.0, "high": 0.0},
+    "phDrift": {"up": 0.0, "down": 5.0},
+    "tipburn": {"mild": -5.0, "strong": -7.5},
+    "pale": {"mild": 8.0, "strong": 12.0},
+    "caMgDeficiency": {"mild": 5.0, "strong": 8.0},
+    "claw": {"mild": -6.0, "strong": -8.0},
 }
 
 PLANS_COLLECTION = "plans"
