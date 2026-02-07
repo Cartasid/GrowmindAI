@@ -399,6 +399,11 @@ export function NutrientCalculator() {
     return phases.length ? phases : [DEFAULT_INPUTS.phase];
   }, [selectedPlan]);
 
+  const currentEntry = useMemo(() => {
+    if (!selectedPlan?.plan) return null;
+    return selectedPlan.plan.find((entry) => entry.phase === inputs.phase) ?? null;
+  }, [selectedPlan, inputs.phase]);
+
   useEffect(() => {
     if (!phaseOptions.includes(inputs.phase)) {
       setInputs((prev: PlanInputs) => ({ ...prev, phase: phaseOptions[0] }));
@@ -1122,6 +1127,9 @@ export function NutrientCalculator() {
                   <div>
                     <h3 className="text-xl font-semibold text-white">{inputs.phase}</h3>
                     <p className="text-sm text-white/60">Tank {inputs.reservoir} L · Substrat {substrate}</p>
+                    <p className="mt-1 text-xs text-white/60">
+                      Ziel-EC: {currentEntry?.EC ? currentEntry.EC : "-"}
+                    </p>
                   </div>
                   <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-white/60">
                     Mix Preview
@@ -1152,7 +1160,9 @@ export function NutrientCalculator() {
                     <thead className="bg-black/40 text-white/60">
                       <tr>
                         <th className="px-4 py-2 text-left">Komponente</th>
-                        <th className="px-4 py-2 text-right">Menge</th>
+                        <th className="px-4 py-2 text-right">pro L</th>
+                        <th className="px-4 py-2 text-right">Gesamt</th>
+                        <th className="px-4 py-2 text-right">Notiz</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1162,12 +1172,18 @@ export function NutrientCalculator() {
                         const unit = item?.unit || fallback.unit;
                         const label = item?.name || fallback.label;
                         const description = item?.description || mixDescriptions[key];
+                        const total = result.mix[key];
+                        const perLiter = inputs.reservoir ? total / inputs.reservoir : 0;
                         return (
                           <tr key={key} className="border-t border-white/5">
                             <td className="px-4 py-2 text-white" title={description}>{label}</td>
                             <td className="px-4 py-2 text-right text-white/80">
-                              {result.mix[key].toFixed(2)} {unit}
+                              {perLiter.toFixed(2)} {unit}/L
                             </td>
+                            <td className="px-4 py-2 text-right text-white/80">
+                              {total.toFixed(2)} {unit}
+                            </td>
+                            <td className="px-4 py-2 text-right text-xs text-white/50">{description || "-"}</td>
                           </tr>
                         );
                       })}
@@ -1189,12 +1205,35 @@ export function NutrientCalculator() {
                         </div>
                       ))}
                     </div>
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 px-4 py-4">
+                      <div className="flex items-center justify-between text-xs text-white/60">
+                        <span>NPK-Verhaeltnis</span>
+                        <span>{buildNpkRatio(result.ppm)}</span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-4">
+                        {(["N", "P", "K"] as const).map((key) => {
+                          const value = result.ppm?.[key] ?? 0;
+                          const maxValue = Math.max(result.ppm?.N ?? 0, result.ppm?.P ?? 0, result.ppm?.K ?? 0, 1);
+                          const height = Math.max(8, (value / maxValue) * 120);
+                          const color = key === "N" ? "bg-emerald-400" : key === "P" ? "bg-orange-400" : "bg-purple-400";
+                          return (
+                            <div key={key} className="flex flex-col items-center gap-2">
+                              <div className="flex h-32 w-full items-end justify-center">
+                                <div className={`w-12 rounded-xl ${color}`} style={{ height }} />
+                              </div>
+                              <div className="text-sm text-white/90">{value.toFixed(0)}</div>
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">{key}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             ) : (
               <p className="mt-4 text-sm text-white/60">
-                Wähle Cultivar, Plan und Parameter – dann auf „Dosis berechnen“ klicken.
+                Waehle Plan und Parameter - dann auf "Dosis berechnen" klicken.
               </p>
             )}
           </motion.div>
@@ -1443,43 +1482,37 @@ export function NutrientCalculator() {
             </div>
 
             <div className="mt-3 flex-1 overflow-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-xs">
-                <thead className="bg-black/40 text-white/60">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Phase</th>
-                    <th className="px-3 py-2 text-right">A</th>
-                    <th className="px-3 py-2 text-right">X</th>
-                    <th className="px-3 py-2 text-right">BZ</th>
-                    <th className="px-3 py-2 text-right">pH</th>
-                    <th className="px-3 py-2 text-right">EC</th>
-                    <th className="px-3 py-2 text-right">Tage</th>
-                    <th className="px-3 py-2 text-right" title={mixDescriptions.kelp}>Tide</th>
-                    <th className="px-3 py-2 text-right" title={mixDescriptions.amino}>Helix</th>
-                    <th className="px-3 py-2 text-right" title={mixDescriptions.fulvic}>Ligand</th>
-                    <th className="px-3 py-2 text-right" title={mixDescriptions.shield}>Silicate/Hypo</th>
-                    <th className="px-3 py-2 text-right">Aktion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editorPlan.plan.map((entry, index) => (
-                    <tr key={`${entry.phase}-${index}`} className="border-t border-white/5">
-                      <td className="px-3 py-2">
+              <div className="grid gap-4 p-4 md:grid-cols-2">
+                {editorPlan.plan.map((entry, index) => (
+                  <div key={`${entry.phase}-${index}`} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-xs text-white/60">
+                        Phase
                         <input
-                          className="w-28 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-white"
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
                           value={entry.phase}
                           onChange={(event: ChangeEvent<HTMLInputElement>) =>
                             updateEntryField(index, "phase", event.target.value)
                           }
                         />
-                      </td>
+                      </label>
+                      <button
+                        className="rounded-full border border-brand-red/40 bg-brand-red/10 px-3 py-1 text-xs text-brand-red"
+                        onClick={() => handleRemoveEntry(index)}
+                      >
+                        Entfernen
+                      </button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3">
                       {([
                         ["A", entry.A],
                         ["X", entry.X],
                         ["BZ", entry.BZ],
                       ] as const).map(([key, value]) => (
-                        <td key={key} className="px-3 py-2 text-right">
+                        <label key={key} className="text-[11px] text-white/60">
+                          {key}
                           <input
-                            className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-2 text-right text-sm text-white"
                             type="number"
                             step={0.01}
                             value={value}
@@ -1487,29 +1520,34 @@ export function NutrientCalculator() {
                               updateEntryField(index, key, Number(event.target.value) || 0)
                             }
                           />
-                        </td>
+                        </label>
                       ))}
-                      <td className="px-3 py-2 text-right">
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      <label className="text-[11px] text-white/60">
+                        pH
                         <input
-                          className="w-20 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-2 text-right text-sm text-white"
                           value={entry.pH}
                           onChange={(event: ChangeEvent<HTMLInputElement>) =>
                             updateEntryField(index, "pH", event.target.value)
                           }
                         />
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </label>
+                      <label className="text-[11px] text-white/60">
+                        EC
                         <input
-                          className="w-20 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-2 text-right text-sm text-white"
                           value={entry.EC}
                           onChange={(event: ChangeEvent<HTMLInputElement>) =>
                             updateEntryField(index, "EC", event.target.value)
                           }
                         />
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </label>
+                      <label className="text-[11px] text-white/60">
+                        Tage
                         <input
-                          className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                          className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-2 text-right text-sm text-white"
                           type="number"
                           min={1}
                           step={1}
@@ -1518,16 +1556,19 @@ export function NutrientCalculator() {
                             updateEntryField(index, "durationDays", Number(event.target.value) || 1)
                           }
                         />
-                      </td>
+                      </label>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {([
                         ["Tide", entry.Tide ?? ""],
                         ["Helix", entry.Helix ?? ""],
                         ["Ligand", entry.Ligand ?? ""],
                         ["Silicate", entry.Silicate ?? ""],
                       ] as const).map(([key, value]) => (
-                        <td key={key} className="px-3 py-2 text-right">
+                        <label key={key} className="text-[11px] text-white/60">
+                          {key}
                           <input
-                            className="w-16 rounded-xl border border-white/10 bg-black/40 px-2 py-1 text-right text-white"
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-2 py-2 text-right text-sm text-white"
                             type="number"
                             step={0.01}
                             value={value}
@@ -1535,20 +1576,12 @@ export function NutrientCalculator() {
                               updateEntryField(index, key as keyof PlanEntry, Number(event.target.value) || 0)
                             }
                           />
-                        </td>
+                        </label>
                       ))}
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          className="rounded-full border border-brand-red/40 bg-brand-red/10 px-3 py-1 text-xs text-brand-red"
-                          onClick={() => handleRemoveEntry(index)}
-                        >
-                          Entfernen
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
