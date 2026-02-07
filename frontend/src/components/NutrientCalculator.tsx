@@ -12,7 +12,7 @@ import {
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
-import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan } from "../services/planService";
+import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan, updatePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
 
 const CULTIVARS: { value: Cultivar; label: string }[] = [
@@ -155,6 +155,8 @@ export function NutrientCalculator() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorPlan, setEditorPlan] = useState<EditablePlan | null>(null);
   const [planSaving, setPlanSaving] = useState(false);
+  const [startDateDraft, setStartDateDraft] = useState("");
+  const [startDateSaving, setStartDateSaving] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
   const [autoPhase, setAutoPhase] = useState(true);
   const [observations, setObservations] = useState({ ...DEFAULT_OBSERVATIONS });
@@ -233,6 +235,10 @@ export function NutrientCalculator() {
     if (!plans.length) return null;
     return plans.find((plan: ManagedPlan) => plan.id === selectedPlanId) ?? plans[0];
   }, [plans, selectedPlanId]);
+
+  useEffect(() => {
+    setStartDateDraft(selectedPlan?.startDate ?? "");
+  }, [selectedPlan]);
 
   const observationAdjustments = useMemo(
     () => selectedPlan?.observationAdjustments ?? DEFAULT_OBSERVATION_ADJUSTMENTS,
@@ -472,6 +478,25 @@ export function NutrientCalculator() {
       addToast({ title: "Plan speichern fehlgeschlagen", description: message, variant: "error" });
     } finally {
       setPlanSaving(false);
+    }
+  };
+
+  const handleStartDateSave = async () => {
+    if (!selectedPlan) return;
+    setStartDateSaving(true);
+    try {
+      const saved = await updatePlan(cultivar, substrate, {
+        ...selectedPlan,
+        startDate: startDateDraft || undefined,
+      });
+      setPlans((prev) => prev.map((plan) => (plan.id === saved.id ? saved : plan)));
+      setSelectedPlanId(saved.id);
+      addToast({ title: "Startdatum gespeichert", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ title: "Startdatum speichern fehlgeschlagen", description: message, variant: "error" });
+    } finally {
+      setStartDateSaving(false);
     }
   };
 
