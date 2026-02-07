@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import type { Cultivar, ManagedPlan, PlanEntry, PlanOptimizationSuggestion, Substrate } from "../types";
+import type { Cultivar, ManagedPlan, PlanEntry, Substrate } from "../types";
 import { useToast } from "./ToastProvider";
 import {
   fetchInventory,
@@ -12,10 +12,8 @@ import {
   type InventoryResponse,
   type MixResponse,
 } from "../services/nutrientService";
-import { optimizePlan } from "../services/aiService";
 import { createPlan, fetchActivePlan, fetchAvailablePlans, fetchDefaultPlan, setActivePlan } from "../services/planService";
 import { MixingInstructionsPanel } from "./MixingInstructionsPanel";
-import { PlanOptimizerModal } from "./PlanOptimizerModal";
 
 const CULTIVARS: { value: Cultivar; label: string }[] = [
   { value: "wedding_cake", label: "Wedding Cake" },
@@ -85,11 +83,7 @@ export function NutrientCalculator() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorPlan, setEditorPlan] = useState<EditablePlan | null>(null);
   const [planSaving, setPlanSaving] = useState(false);
-  const [aiGenerating, setAiGenerating] = useState(false);
   const [activateAfterSave, setActivateAfterSave] = useState(true);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiInsights, setAiInsights] = useState<PlanOptimizationSuggestion[] | null>(null);
-  const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [inventoryInput, setInventoryInput] = useState<Record<string, string>>({});
   const [inventorySetInput, setInventorySetInput] = useState<Record<string, string>>({});
   const { addToast } = useToast();
@@ -173,53 +167,6 @@ export function NutrientCalculator() {
     isDefault: false,
     ...overrides,
   });
-
-  const mergeAiSuggestions = (
-    base: PlanEntry[],
-    suggestions: {
-      phase: string;
-      A: number;
-      X: number;
-      BZ: number;
-      pH: string;
-      EC: string;
-      notes?: string;
-      stage?: string;
-      reasoning?: string;
-      risks?: string[];
-    }[]
-  ) =>
-    suggestions.map((suggestion) => {
-      const match = base.find((entry) => entry.phase === suggestion.phase);
-      const notes = match?.notes ? [...match.notes] : [];
-      if (suggestion.stage) {
-        notes.unshift(suggestion.stage);
-      }
-      if (suggestion.notes) {
-        notes.push(suggestion.notes);
-      }
-      if (suggestion.reasoning) {
-        notes.push(`Begruendung: ${suggestion.reasoning}`);
-      }
-      if (suggestion.risks?.length) {
-        notes.push(`Risiken: ${suggestion.risks.join(", ")}`);
-      }
-      return {
-        phase: suggestion.phase,
-        A: Number.isFinite(suggestion.A) ? suggestion.A : 0,
-        X: Number.isFinite(suggestion.X) ? suggestion.X : 0,
-        BZ: Number.isFinite(suggestion.BZ) ? suggestion.BZ : 0,
-        pH: suggestion.pH ?? "",
-        EC: suggestion.EC ?? "",
-        durationDays: match?.durationDays ?? 7,
-        Tide: match?.Tide,
-        Helix: match?.Helix,
-        Ligand: match?.Ligand,
-        Silicate: match?.Silicate,
-        SilicateUnit: match?.SilicateUnit,
-        notes: notes.length ? notes : undefined,
-      };
-    });
 
   const phaseOptions = useMemo(() => {
     if (!selectedPlan?.plan) return [DEFAULT_INPUTS.phase];
@@ -328,46 +275,7 @@ export function NutrientCalculator() {
       description: `Kopie von ${selectedPlan.name}`,
     });
     setEditorPlan(draft);
-    setAiSummary(null);
-    setAiInsights(null);
     setShowEditor(true);
-  };
-
-  const handleGenerateAiPlan = async () => {
-    if (!selectedPlan) return;
-    setAiGenerating(true);
-    setAiSummary(null);
-    setAiInsights(null);
-    try {
-      const waterProfile = (selectedPlan.waterProfile ? { ...selectedPlan.waterProfile } : {}) as Record<string, number>;
-      const response = await optimizePlan(
-        selectedPlan.plan,
-        "de",
-        cultivar,
-        substrate,
-        waterProfile,
-        selectedPlan.osmosisShare
-      );
-      if (!response.ok) {
-        throw new Error(response.error.details ?? response.error.message);
-      }
-      const aiPlanEntries = mergeAiSuggestions(selectedPlan.plan, response.data.plan);
-      const draft = buildDraftFromPlan(selectedPlan, {
-        name: `AI Plan ${selectedPlan.name}`,
-        description: response.data.summary ?? "AI-generierter Plan basierend auf dem aktuellen Profil.",
-        plan: aiPlanEntries,
-      });
-      setEditorPlan(draft);
-      setAiSummary(response.data.summary ?? null);
-      setAiInsights(response.data.plan ?? null);
-      setShowEditor(true);
-      addToast({ title: "AI-Plan bereit", variant: "success" });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      addToast({ title: "AI-Plan fehlgeschlagen", description: message, variant: "error" });
-    } finally {
-      setAiGenerating(false);
-    }
   };
 
   const handleInventoryConsume = async (key: string) => {
@@ -553,44 +461,6 @@ export function NutrientCalculator() {
                       disabled={!selectedPlan}
                     >
                       Neuen Plan anlegen
-                    </button>
-                    <button
-                      className="rounded-full border border-brand-purple/40 bg-brand-purple/15 px-4 py-2 text-xs text-brand-purple shadow-brand-glow hover:border-brand-purple/70"
-                      onClick={handleGenerateAiPlan}
-                      disabled={!selectedPlan || aiGenerating}
-                    >
-                      {aiGenerating ? "AI generiert…" : "AI-Plan generieren"}
-                    </button>
-                    <button
-                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
-                      onClick={() => setOptimizerOpen(true)}
-                      disabled={!selectedPlan}
-                    >
-                      Plan optimieren
-                    </button>
-                  </div>
-                </div>
-              )}
-              {selectedPlan && (
-                <div className="rounded-2xl border border-brand-purple/30 bg-brand-purple/10 px-4 py-3 text-sm text-white/70">
-                  <p className="text-xs uppercase tracking-[0.3em] text-white/40">AI-Powered Plans</p>
-                  <p className="mt-2 text-white/80">
-                    AI optimiert den Wochenplan basierend auf Wasserprofil, Phase und Grow-Trends.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className="rounded-full border border-brand-purple/40 bg-brand-purple/15 px-4 py-2 text-xs text-brand-purple shadow-brand-glow hover:border-brand-purple/70"
-                      onClick={handleGenerateAiPlan}
-                      disabled={!selectedPlan || aiGenerating}
-                    >
-                      {aiGenerating ? "AI generiert…" : "AI-Plan starten"}
-                    </button>
-                    <button
-                      className="rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white"
-                      onClick={handleCreateDraft}
-                      disabled={!selectedPlan}
-                    >
-                      Plan-Editor öffnen
                     </button>
                   </div>
                 </div>
@@ -842,30 +712,6 @@ export function NutrientCalculator() {
               </button>
             </div>
 
-            {aiSummary && (
-              <div className="mt-4 rounded-2xl border border-brand-purple/40 bg-brand-purple/10 px-4 py-3 text-xs text-brand-purple">
-                {aiSummary}
-              </div>
-            )}
-
-            {aiInsights && aiInsights.length > 0 && (
-              <div className="mt-3 rounded-2xl border border-brand-cyan/30 bg-black/30 px-4 py-3 text-xs text-white/70">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">AI Begruendung</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {aiInsights.map((entry, index) => (
-                    <div key={`${entry.phase}-${index}`} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
-                      <p className="text-sm text-white">{entry.phase}</p>
-                      {entry.reasoning && <p className="mt-1 text-xs text-white/70">{entry.reasoning}</p>}
-                      {entry.risks && entry.risks.length > 0 && (
-                        <p className="mt-1 text-[11px] text-brand-orange">
-                          Risiken: {entry.risks.join(", ")}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="text-sm text-white/70">
@@ -1049,29 +895,6 @@ export function NutrientCalculator() {
         </div>
       )}
 
-      {optimizerOpen && selectedPlan && (
-        <PlanOptimizerModal
-          isOpen={optimizerOpen}
-          onClose={() => setOptimizerOpen(false)}
-          plan={selectedPlan}
-          lang="de"
-          cultivar={cultivar}
-          substrate={substrate}
-          onApply={(response) => {
-            const aiPlanEntries = mergeAiSuggestions(selectedPlan.plan, response.plan);
-            const draft = buildDraftFromPlan(selectedPlan, {
-              name: `AI Plan ${selectedPlan.name}`,
-              description: response.summary ?? "AI-generierter Plan basierend auf Targets.",
-              plan: aiPlanEntries,
-            });
-            setEditorPlan(draft);
-            setAiSummary(response.summary ?? null);
-            setAiInsights(response.plan ?? null);
-            setShowEditor(true);
-            setOptimizerOpen(false);
-          }}
-        />
-      )}
     </motion.section>
   );
 }
