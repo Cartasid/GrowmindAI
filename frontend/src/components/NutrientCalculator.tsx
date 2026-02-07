@@ -599,6 +599,16 @@ export function NutrientCalculator() {
                   ))}
                 </select>
               </label>
+              <label className="text-sm text-white/70">
+                Startdatum (fuer Wochenplan)
+                <input
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-white focus:border-brand-cyan/60 focus:outline-none focus:ring-1 focus:ring-brand-cyan/30"
+                  type="date"
+                  value={startDateDraft}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setStartDateDraft(event.target.value)}
+                  disabled={!selectedPlan}
+                />
+              </label>
               {!planLoading && plans.length === 0 && (
                 <div className="rounded-2xl border border-brand-red/40 bg-brand-red/10 px-4 py-3 text-xs text-brand-red">
                   Keine Pläne verfügbar. Prüfe die API-Verbindung oder die Plan-Konfiguration.
@@ -608,6 +618,15 @@ export function NutrientCalculator() {
                 <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
                   <p className="text-xs uppercase tracking-[0.3em] text-white/40">Plan-Info</p>
                   <p className="mt-2 text-white/80">{selectedPlan.description || "Kein Plan-Text hinterlegt."}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className="rounded-full border border-white/10 bg-black/40 px-4 py-1 text-xs text-white/70 hover:border-brand-cyan/40 hover:text-white disabled:opacity-60"
+                      onClick={handleStartDateSave}
+                      disabled={startDateSaving || !selectedPlan}
+                    >
+                      {startDateSaving ? "Speichert..." : "Startdatum speichern"}
+                    </button>
+                  </div>
                   {selectedPlanId !== activePlanId && (
                     <button
                       className="mt-3 rounded-full border border-brand-cyan/40 bg-black/40 px-4 py-1 text-xs text-brand-cyan shadow-brand-glow hover:border-brand-cyan/70 hover:bg-brand-cyan/20"
