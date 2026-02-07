@@ -188,7 +188,7 @@ function ControlRow({
           >
             Ausloesen
           </button>
-        ) : (
+        ) : !isToggle ? (
           <button
             className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-4 py-1 text-xs text-brand-cyan shadow-brand-glow"
             onClick={() => onSave(currentValue)}
@@ -196,7 +196,7 @@ function ControlRow({
           >
             Speichern
           </button>
-        )}
+        ) : null}
       </div>
 
       {isAction ? null : isSelect ? (
@@ -222,7 +222,12 @@ function ControlRow({
           <input
             type="checkbox"
             checked={currentValue === "on" || currentValue === "true" || currentValue === "1"}
-            onChange={(event) => setPending(event.target.checked ? "on" : "off")}
+            onChange={(event) => {
+              const nextValue = event.target.checked ? "on" : "off";
+              setPending(nextValue);
+              onSave(nextValue);
+            }}
+            disabled={busy || !item.role}
           />
           {item.unit ? item.unit : "Toggle"}
         </label>
