@@ -1083,23 +1083,23 @@ export function NutrientCalculator() {
                   return (
                     <div
                       key={item.phase}
-                      className={`relative overflow-hidden rounded-2xl border px-3 py-3 text-xs ${
+                      className={`relative overflow-hidden rounded-2xl border px-4 py-4 text-xs ${
                         isCurrent
-                          ? "border-brand-cyan/50 bg-brand-cyan/10 text-white"
+                          ? "border-brand-cyan/60 bg-brand-cyan/10 text-white"
                           : "border-white/10 bg-black/30 text-white/70"
-                      }`}
+                      } ${phaseGlow(item.phase)}`}
                     >
                       <div className={`absolute inset-0 bg-gradient-to-br ${phaseTone(item.phase)} opacity-70`} />
-                      <div className="relative z-10 flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`flex h-9 w-9 items-center justify-center rounded-xl border ${phaseBadge(item.phase)}`}>
+                      <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${phaseBadge(item.phase)}`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${phaseBadge(item.phase)}`}>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] ${phaseBadge(item.phase)}`}>
                               {item.phase}
                             </span>
-                            <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-white/50">Zeitraum</p>
+                            <p className="mt-2 text-[10px] uppercase tracking-[0.25em] text-white/50">Zeitraum</p>
                           </div>
                         </div>
                         {isCurrent && (
@@ -1109,7 +1109,7 @@ export function NutrientCalculator() {
                         )}
                       </div>
                       <div className="relative z-10 mt-2">
-                        <p className="text-sm text-white">{item.label}</p>
+                        <p className="text-lg font-semibold tracking-tight text-white">{item.label}</p>
                       </div>
                     </div>
                   );
