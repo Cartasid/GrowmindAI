@@ -32,6 +32,24 @@ export type SystemInfo = {
   grafana_embed_url?: string;
 };
 
+export type HvacAutoResult = {
+  status: string;
+  inputs: {
+    temp_actual: number | null;
+    temp_target: number | null;
+    hum_actual: number | null;
+    hum_target: number | null;
+  };
+  decisions: {
+    heater_on: boolean;
+    ac_on: boolean;
+    dehumidifier_on: boolean;
+    humidifier_on: boolean;
+    fan_target: number;
+  };
+  actions: Record<string, boolean>;
+};
+
 const requestJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(apiUrl(path), init);
   if (!response.ok) {
@@ -127,8 +145,8 @@ export const updateConfigValue = async (payload: {
   });
 };
 
-export const runHvacAuto = async (): Promise<void> => {
-  await requestJson<{ status: string }>("/api/control/hvac/auto", {
+export const runHvacAuto = async (): Promise<HvacAutoResult> => {
+  return requestJson<HvacAutoResult>("/api/control/hvac/auto", {
     method: "POST",
   });
 };

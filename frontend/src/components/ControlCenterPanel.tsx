@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchConfig, runHvacAuto, updateConfigValue, type ConfigMap } from "../services/configService";
+import {
+  fetchConfig,
+  runHvacAuto,
+  updateConfigValue,
+  type ConfigMap,
+  type HvacAutoResult,
+} from "../services/configService";
 import { fetchAutomations, setAutomationEnabled, type AutomationSummary } from "../services/automationService";
 import { useHaEntity } from "../hooks/useHaEntity";
 import { useToast } from "./ToastProvider";
@@ -65,6 +71,13 @@ type PanelStatus = "idle" | "loading" | "ready" | "error";
 
 type HvacMode = "auto_ai" | "manual" | "app_auto";
 
+type HvacAutoStatus = {
+  lastRun: string;
+  ok: boolean;
+  summary: string;
+  inputs: HvacAutoResult["inputs"];
+};
+
 const HVAC_MODE_STORAGE_KEY = "growmind.hvac_mode";
 const HVAC_AUTOMATION_STORAGE_KEY = "growmind.hvac_automation";
 
@@ -95,6 +108,31 @@ const formatStatus = (value: string | null | undefined) => {
   if (value === "on") return "an";
   if (value === "off") return "aus";
   return value;
+};
+
+const formatAutoSummary = (decisions?: HvacAutoResult["decisions"]) => {
+  if (!decisions) return "Keine Daten";
+  const parts = [
+    `Heizung ${decisions.heater_on ? "an" : "aus"}`,
+    `AC ${decisions.ac_on ? "an" : "aus"}`,
+    `Entfeuchter ${decisions.dehumidifier_on ? "an" : "aus"}`,
+    `Befeuchter ${decisions.humidifier_on ? "an" : "aus"}`,
+    `Luefter ${Math.round(decisions.fan_target)}%`,
+  ];
+  return parts.join(", ");
+};
+
+const formatAutoInputs = (inputs?: HvacAutoResult["inputs"]) => {
+  if (!inputs) return "-";
+  const temp =
+    inputs.temp_actual != null && inputs.temp_target != null
+      ? `Temp ${inputs.temp_actual.toFixed(1)}/${inputs.temp_target.toFixed(1)}C`
+      : null;
+  const hum =
+    inputs.hum_actual != null && inputs.hum_target != null
+      ? `RH ${inputs.hum_actual.toFixed(0)}/${inputs.hum_target.toFixed(0)}%`
+      : null;
+  return [temp, hum].filter(Boolean).join(" · ") || "-";
 };
 
 function ControlRow({
@@ -240,6 +278,7 @@ export function ControlCenterPanel() {
   const [automationStatus, setAutomationStatus] = useState<PanelStatus>("idle");
   const { addToast } = useToast();
   const lastAutoErrorRef = useRef(0);
+  const [autoStatus, setAutoStatus] = useState<HvacAutoStatus | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -297,11 +336,27 @@ export function ControlCenterPanel() {
 
     const runAuto = async () => {
       try {
-        await runHvacAuto();
+        const result = await runHvacAuto();
+        setAutoStatus({
+          lastRun: new Date().toLocaleTimeString(),
+          ok: true,
+          summary: formatAutoSummary(result.decisions),
+          inputs: result.inputs,
+        });
       } catch (err) {
         if (!active) return;
         const message = err instanceof Error ? err.message : String(err);
         setError(message);
+        setAutoStatus((prev) =>
+          prev
+            ? { ...prev, ok: false }
+            : {
+                lastRun: new Date().toLocaleTimeString(),
+                ok: false,
+                summary: "Fehler",
+                inputs: { temp_actual: null, temp_target: null, hum_actual: null, hum_target: null },
+              }
+        );
         const now = Date.now();
         if (now - lastAutoErrorRef.current > 60_000) {
           lastAutoErrorRef.current = now;
@@ -467,6 +522,25 @@ export function ControlCenterPanel() {
               </select>
             </label>
           </div>
+          {hvacMode === "app_auto" && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-[11px] text-white/60">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>App Auto Status</span>
+                <span
+                  className={`rounded-full border px-3 py-1 text-[10px] ${
+                    autoStatus?.ok
+                      ? "border-grow-lime/40 bg-grow-lime/10 text-grow-lime"
+                      : "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
+                  }`}
+                >
+                  {autoStatus?.ok ? "AKTIV" : "WARNUNG"}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-white/60">Letzter Lauf: {autoStatus?.lastRun ?? "-"}</p>
+              <p className="mt-1 text-xs text-white/50">{formatAutoInputs(autoStatus?.inputs)}</p>
+              <p className="mt-1 text-xs text-white/50">{autoStatus?.summary ?? "-"}</p>
+            </div>
+          )}
         </div>
         {sections.map((section) => (
           <div key={section.key} className="rounded-2xl border border-white/10 bg-black/30 p-4">
